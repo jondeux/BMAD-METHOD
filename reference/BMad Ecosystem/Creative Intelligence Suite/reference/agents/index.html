@@ -1,0 +1,430 @@
+<!DOCTYPE html><html lang="en" dir="ltr" data-theme="dark" data-has-toc data-has-sidebar class="astro-zmwf737p"> <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>CIS Agents | Creative Intelligence Suite</title><link rel="canonical" href="index.html"/><link rel="sitemap" href="https://cis-docs.bmad-method.org/sitemap-index.xml"/><link rel="shortcut icon" href="../../favicon.ico" type="image/x-icon"/><meta name="generator" content="Astro v5.17.1"/><meta name="generator" content="Starlight v0.37.6"/><meta property="og:title" content="CIS Agents"/><meta property="og:type" content="article"/><meta property="og:url" content="https://cis-docs.bmad-method.org/reference/agents/"/><meta property="og:locale" content="en"/><meta property="og:description" content="Reference for all Creative Intelligence Suite agents"/><meta property="og:site_name" content="Creative Intelligence Suite"/><meta name="twitter:card" content="summary_large_image"/><meta name="description" content="Reference for all Creative Intelligence Suite agents"/><meta name="ai-terms" content="AI-optimized documentation: https://cis-docs.bmad-method.org/llms-full.txt (plain text). Index: https://cis-docs.bmad-method.org/llms.txt"/><meta name="llms-full" content="https://cis-docs.bmad-method.org/llms-full.txt"/><meta name="llms" content="https://cis-docs.bmad-method.org/llms.txt"/><script>
+	window.StarlightThemeProvider = (() => {
+		const storedTheme =
+			typeof localStorage !== 'undefined' && localStorage.getItem('starlight-theme');
+		const theme =
+			storedTheme ||
+			(window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+		document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
+		return {
+			updatePickers(theme = storedTheme || 'auto') {
+				document.querySelectorAll('starlight-theme-select').forEach((picker) => {
+					const select = picker.querySelector('select');
+					if (select) select.value = theme;
+					/** @type {HTMLTemplateElement | null} */
+					const tmpl = document.querySelector(`#theme-icons`);
+					const newIcon = tmpl && tmpl.content.querySelector('.' + theme);
+					if (newIcon) {
+						const oldIcon = picker.querySelector('svg.label-icon');
+						if (oldIcon) {
+							oldIcon.replaceChildren(...newIcon.cloneNode(true).childNodes);
+						}
+					}
+				});
+			},
+		};
+	})();
+</script><template id="theme-icons"><svg aria-hidden="true" class="light astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M5 12a1 1 0 0 0-1-1H3a1 1 0 0 0 0 2h1a1 1 0 0 0 1-1Zm.64 5-.71.71a1 1 0 0 0 0 1.41 1 1 0 0 0 1.41 0l.71-.71A1 1 0 0 0 5.64 17ZM12 5a1 1 0 0 0 1-1V3a1 1 0 0 0-2 0v1a1 1 0 0 0 1 1Zm5.66 2.34a1 1 0 0 0 .7-.29l.71-.71a1 1 0 1 0-1.41-1.41l-.66.71a1 1 0 0 0 0 1.41 1 1 0 0 0 .66.29Zm-12-.29a1 1 0 0 0 1.41 0 1 1 0 0 0 0-1.41l-.71-.71a1.004 1.004 0 1 0-1.43 1.41l.73.71ZM21 11h-1a1 1 0 0 0 0 2h1a1 1 0 0 0 0-2Zm-2.64 6A1 1 0 0 0 17 18.36l.71.71a1 1 0 0 0 1.41 0 1 1 0 0 0 0-1.41l-.76-.66ZM12 6.5a5.5 5.5 0 1 0 5.5 5.5A5.51 5.51 0 0 0 12 6.5Zm0 9a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm0 3.5a1 1 0 0 0-1 1v1a1 1 0 0 0 2 0v-1a1 1 0 0 0-1-1Z"/></svg><svg aria-hidden="true" class="dark astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21.64 13a1 1 0 0 0-1.05-.14 8.049 8.049 0 0 1-3.37.73 8.15 8.15 0 0 1-8.14-8.1 8.59 8.59 0 0 1 .25-2A1 1 0 0 0 8 2.36a10.14 10.14 0 1 0 14 11.69 1 1 0 0 0-.36-1.05Zm-9.5 6.69A8.14 8.14 0 0 1 7.08 5.22v.27a10.15 10.15 0 0 0 10.14 10.14 9.784 9.784 0 0 0 2.1-.22 8.11 8.11 0 0 1-7.18 4.32v-.04Z"/></svg><svg aria-hidden="true" class="auto astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg></template><link rel="stylesheet" href="../../_astro/print.DNXP8c50.css" media="print"><link rel="stylesheet" href="../../_astro/index.ChNUjE4w.css"><script type="module" src="../../_astro/page.B1D-nYk3.js"></script></head> <body class="astro-zmwf737p"> <a href="index.html#_top" class="astro-zdlmp2jq">Skip to content</a>  <div class="page sl-flex astro-rvnnnu4j"> <header class="header astro-rvnnnu4j"><div class="ai-banner astro-kggsjsm4"> <span class="astro-kggsjsm4">🤖 AI-optimized docs: <a href="https://cis-docs.bmad-method.org/llms-full.txt" class="astro-kggsjsm4">llms-full.txt</a></span> </div>  <div class="header sl-flex astro-3ef6ksr2"> <div class="title-wrapper sl-flex astro-3ef6ksr2"> <a href="../../index.html" class="site-title sl-flex astro-kvxjctbm">  <img class="light:sl-hidden print:hidden astro-kvxjctbm" alt="Creative Intelligence Suite" src="../../_astro/bmad-dark.D20ih90E.png" width="527" height="96"> <img class="dark:sl-hidden print:block astro-kvxjctbm" alt="Creative Intelligence Suite" src="../../_astro/bmad-light.BNtEvXSi.png" width="527" height="96"> <span class="sr-only astro-kvxjctbm" translate="no"> Creative Intelligence Suite </span> </a>  </div> <div class="sl-flex print:hidden astro-3ef6ksr2"> <site-search class="astro-3ef6ksr2 astro-2wn4662t" data-translations="{&#34;placeholder&#34;:&#34;Search&#34;}"> <button data-open-modal disabled aria-label="Search" aria-keyshortcuts="Control+K" class="astro-2wn4662t"> <svg aria-hidden="true" class="astro-2wn4662t astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21.71 20.29 18 16.61A9 9 0 1 0 16.61 18l3.68 3.68a.999.999 0 0 0 1.42 0 1 1 0 0 0 0-1.39ZM11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14Z"/></svg> <span class="sl-hidden md:sl-block astro-2wn4662t" aria-hidden="true">Search</span> <kbd class="sl-hidden md:sl-flex astro-2wn4662t" style="display: none;"> <kbd class="astro-2wn4662t">Ctrl</kbd><kbd class="astro-2wn4662t">K</kbd> </kbd> </button> <dialog style="padding:0" aria-label="Search" class="astro-2wn4662t"> <div class="dialog-frame sl-flex astro-2wn4662t">  <button data-close-modal class="sl-flex md:sl-hidden astro-2wn4662t"> Cancel </button> <div class="search-container astro-2wn4662t"> <div id="starlight__search" class="astro-2wn4662t"></div> </div> </div> </dialog> </site-search>  <script>
+	(() => {
+		const openBtn = document.querySelector('button[data-open-modal]');
+		const shortcut = openBtn?.querySelector('kbd');
+		if (!openBtn || !(shortcut instanceof HTMLElement)) return;
+		const platformKey = shortcut.querySelector('kbd');
+		if (platformKey && /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform)) {
+			platformKey.textContent = '⌘';
+			openBtn.setAttribute('aria-keyshortcuts', 'Meta+K');
+		}
+		shortcut.style.display = '';
+	})();
+</script> <script type="module" src="../../_astro/Search.astro_astro_type_script_index_0_lang.cjYDvRdi.js"></script>   </div> <div class="sl-hidden md:sl-flex print:hidden right-group astro-3ef6ksr2"> <div class="sl-flex social-icons astro-3ef6ksr2"> <a href="https://discord.gg/gk8jAdXWmj" rel="me" class="sl-flex astro-vyr57y5k"><span class="sr-only astro-vyr57y5k">Discord</span><svg aria-hidden="true" class="astro-vyr57y5k astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M20.32 4.37a19.8 19.8 0 0 0-4.93-1.51 13.78 13.78 0 0 0-.64 1.28 18.27 18.27 0 0 0-5.5 0 12.64 12.64 0 0 0-.64-1.28h-.05A19.74 19.74 0 0 0 3.64 4.4 20.26 20.26 0 0 0 .11 18.09l.02.02a19.9 19.9 0 0 0 6.04 3.03l.04-.02a14.24 14.24 0 0 0 1.23-2.03.08.08 0 0 0-.05-.07 13.1 13.1 0 0 1-1.9-.92.08.08 0 0 1 .02-.1 10.2 10.2 0 0 0 .41-.31h.04a14.2 14.2 0 0 0 12.1 0l.04.01a9.63 9.63 0 0 0 .4.32.08.08 0 0 1-.03.1 12.29 12.29 0 0 1-1.9.91.08.08 0 0 0-.02.1 15.97 15.97 0 0 0 1.27 2.01h.04a19.84 19.84 0 0 0 6.03-3.05v-.03a20.12 20.12 0 0 0-3.57-13.69ZM8.02 15.33c-1.18 0-2.16-1.08-2.16-2.42 0-1.33.96-2.42 2.16-2.42 1.21 0 2.18 1.1 2.16 2.42 0 1.34-.96 2.42-2.16 2.42Zm7.97 0c-1.18 0-2.15-1.08-2.15-2.42 0-1.33.95-2.42 2.15-2.42 1.22 0 2.18 1.1 2.16 2.42 0 1.34-.94 2.42-2.16 2.42Z"/></svg></a><a href="https://github.com/bmad-code-org/bmad-module-creative-intelligence-suite" rel="me" class="sl-flex astro-vyr57y5k"><span class="sr-only astro-vyr57y5k">GitHub</span><svg aria-hidden="true" class="astro-vyr57y5k astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.08 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3Z"/></svg></a><a href="https://www.youtube.com/@BMadCode" rel="me" class="sl-flex astro-vyr57y5k"><span class="sr-only astro-vyr57y5k">YouTube</span><svg aria-hidden="true" class="astro-vyr57y5k astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M23.5 6.2A3 3 0 0 0 21.4 4c-1.9-.5-9.4-.5-9.4-.5s-7.5 0-9.4.5A3 3 0 0 0 .5 6.3C0 8 0 12 0 12s0 4 .5 5.8A3 3 0 0 0 2.6 20c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2c.5-2 .5-5.9.5-5.9s0-4-.5-5.8zm-14 9.4V8.4l6.3 3.6-6.3 3.6z"/></svg></a> </div> <starlight-theme-select>  <label style="--sl-select-width: 6.25em" class="astro-ybrh4trg"> <span class="sr-only astro-ybrh4trg">Select theme</span> <svg aria-hidden="true" class="icon label-icon astro-ybrh4trg astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg> <select autocomplete="off" class="astro-ybrh4trg"> <option value="dark" class="astro-ybrh4trg">Dark</option><option value="light" class="astro-ybrh4trg">Light</option><option value="auto" selected class="astro-ybrh4trg">Auto</option> </select> <svg aria-hidden="true" class="icon caret astro-ybrh4trg astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M17 9.17a1 1 0 0 0-1.41 0L12 12.71 8.46 9.17a1 1 0 1 0-1.41 1.42l4.24 4.24a1.002 1.002 0 0 0 1.42 0L17 10.59a1.002 1.002 0 0 0 0-1.42Z"/></svg> </label>  </starlight-theme-select>  <script>
+	StarlightThemeProvider.updatePickers();
+</script> <script type="module">const r="starlight-theme",o=e=>e==="auto"||e==="dark"||e==="light"?e:"auto",c=()=>o(typeof localStorage<"u"&&localStorage.getItem(r));function n(e){typeof localStorage<"u"&&localStorage.setItem(r,e==="light"||e==="dark"?e:"")}const l=()=>matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";function t(e){StarlightThemeProvider.updatePickers(e),document.documentElement.dataset.theme=e==="auto"?l():e,n(e)}matchMedia("(prefers-color-scheme: light)").addEventListener("change",()=>{c()==="auto"&&t("auto")});class s extends HTMLElement{constructor(){super(),t(c()),this.querySelector("select")?.addEventListener("change",a=>{a.currentTarget instanceof HTMLSelectElement&&t(o(a.currentTarget.value))})}}customElements.define("starlight-theme-select",s);</script> <script type="module">class s extends HTMLElement{constructor(){super();const e=this.querySelector("select");e&&(e.addEventListener("change",t=>{t.currentTarget instanceof HTMLSelectElement&&(window.location.pathname=t.currentTarget.value)}),window.addEventListener("pageshow",t=>{if(!t.persisted)return;const n=e.querySelector("option[selected]")?.index;n!==e.selectedIndex&&(e.selectedIndex=n??0)}))}}customElements.define("starlight-lang-select",s);</script> </div> </div> </header> <nav class="sidebar print:hidden astro-rvnnnu4j" aria-label="Main"> <starlight-menu-button class="print:hidden astro-i3775yku"> <button aria-expanded="false" aria-label="Menu" aria-controls="starlight__sidebar" class="sl-flex md:sl-hidden astro-i3775yku"> <svg aria-hidden="true" class="open-menu astro-i3775yku astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M3 8h18a1 1 0 1 0 0-2H3a1 1 0 0 0 0 2Zm18 8H3a1 1 0 0 0 0 2h18a1 1 0 0 0 0-2Zm0-5H3a1 1 0 0 0 0 2h18a1 1 0 0 0 0-2Z"/></svg> <svg aria-hidden="true" class="close-menu astro-i3775yku astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="m13.41 12 6.3-6.29a1.004 1.004 0 1 0-1.42-1.42L12 10.59l-6.29-6.3a1.004 1.004 0 0 0-1.42 1.42l6.3 6.29-6.3 6.29a1 1 0 0 0 0 1.42.998.998 0 0 0 1.42 0l6.29-6.3 6.29 6.3a.999.999 0 0 0 1.42 0 1 1 0 0 0 0-1.42L13.41 12Z"/></svg> </button> </starlight-menu-button> <script type="module">class s extends HTMLElement{constructor(){super(),this.btn=this.querySelector("button"),this.btn.addEventListener("click",()=>this.toggleExpanded());const t=this.closest("nav");t&&t.addEventListener("keyup",e=>this.closeOnEscape(e))}setExpanded(t){this.setAttribute("aria-expanded",String(t)),document.body.toggleAttribute("data-mobile-menu-expanded",t)}toggleExpanded(){this.setExpanded(this.getAttribute("aria-expanded")!=="true")}closeOnEscape(t){t.code==="Escape"&&(this.setExpanded(!1),this.btn.focus())}}customElements.define("starlight-menu-button",s);</script>   <div id="starlight__sidebar" class="sidebar-pane astro-rvnnnu4j"> <div class="sidebar-content sl-flex astro-rvnnnu4j"> <sl-sidebar-state-persist data-hash="04ogb7y" class="astro-ntwi2ksn"> <script aria-hidden="true">
+		(() => {
+			try {
+				if (!matchMedia('(min-width: 50em)').matches) return;
+				/** @type {HTMLElement | null} */
+				const target = document.querySelector('sl-sidebar-state-persist');
+				const state = JSON.parse(sessionStorage.getItem('sl-sidebar-state') || '0');
+				if (!target || !state || target.dataset.hash !== state.hash) return;
+				window._starlightScrollRestore = state.scroll;
+				customElements.define(
+					'sl-sidebar-restore',
+					class SidebarRestore extends HTMLElement {
+						connectedCallback() {
+							try {
+								const idx = parseInt(this.dataset.index || '');
+								const details = this.closest('details');
+								if (details && typeof state.open[idx] === 'boolean') details.open = state.open[idx];
+							} catch {}
+						}
+					}
+				);
+			} catch {}
+		})();
+	</script>  <ul class="top-level astro-mriontpf"> <li class="astro-mriontpf"> <a href="../../index.html" class="large astro-mriontpf"> <span class="astro-mriontpf">Welcome</span>  </a> </li><li class="astro-mriontpf"> <details open class="astro-mriontpf"> <summary class="astro-mriontpf"> <span class="group-label astro-mriontpf"> <span class="large astro-mriontpf">Tutorials</span>  </span> <svg aria-hidden="true" class="caret astro-mriontpf astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="0"></sl-sidebar-restore> <ul class="astro-mriontpf"> <li class="astro-mriontpf"> <a href="../../tutorials/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">Tutorials</span>  </a> </li><li class="astro-mriontpf"> <a href="../../tutorials/getting-started/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">Getting Started with CIS</span>  </a> </li> </ul>  </details> </li><li class="astro-mriontpf"> <details class="astro-mriontpf"> <summary class="astro-mriontpf"> <span class="group-label astro-mriontpf"> <span class="large astro-mriontpf">How-To Guides</span>  </span> <svg aria-hidden="true" class="caret astro-mriontpf astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="1"></sl-sidebar-restore> <ul class="astro-mriontpf"> <li class="astro-mriontpf"> <a href="../../how-to/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">How-To Guides</span>  </a> </li><li class="astro-mriontpf"> <a href="../../how-to/brainstorm/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">Run a Brainstorming Session</span>  </a> </li><li class="astro-mriontpf"> <a href="../../how-to/design-thinking/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">Apply Design Thinking</span>  </a> </li><li class="astro-mriontpf"> <a href="../../how-to/innovation-strategy/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">Develop an Innovation Strategy</span>  </a> </li><li class="astro-mriontpf"> <a href="../../how-to/problem-solving/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">Solve Complex Problems</span>  </a> </li><li class="astro-mriontpf"> <a href="../../how-to/storytelling/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">Craft a Compelling Story</span>  </a> </li> </ul>  </details> </li><li class="astro-mriontpf"> <details class="astro-mriontpf"> <summary class="astro-mriontpf"> <span class="group-label astro-mriontpf"> <span class="large astro-mriontpf">Explanation</span>  </span> <svg aria-hidden="true" class="caret astro-mriontpf astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="2"></sl-sidebar-restore> <ul class="astro-mriontpf"> <li class="astro-mriontpf"> <a href="../../explanation/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">Explanation</span>  </a> </li><li class="astro-mriontpf"> <a href="../../explanation/brainstorming-techniques/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">Brainstorming Techniques</span>  </a> </li><li class="astro-mriontpf"> <a href="../../explanation/creative-intelligence/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">Understanding Creative Intelligence</span>  </a> </li><li class="astro-mriontpf"> <a href="../../explanation/design-thinking-phases/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">Design Thinking Phases</span>  </a> </li><li class="astro-mriontpf"> <a href="../../explanation/innovation-frameworks/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">Innovation Frameworks</span>  </a> </li> </ul>  </details> </li><li class="astro-mriontpf"> <details open class="astro-mriontpf"> <summary class="astro-mriontpf"> <span class="group-label astro-mriontpf"> <span class="large astro-mriontpf">Reference</span>  </span> <svg aria-hidden="true" class="caret astro-mriontpf astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="3"></sl-sidebar-restore> <ul class="astro-mriontpf"> <li class="astro-mriontpf"> <a href="../index.html" class="astro-mriontpf"> <span class="astro-mriontpf">Reference</span>  </a> </li><li class="astro-mriontpf"> <a href="index.html" aria-current="page" class="astro-mriontpf"> <span class="astro-mriontpf">CIS Agents</span>  </a> </li><li class="astro-mriontpf"> <a href="../configuration/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">CIS Configuration</span>  </a> </li><li class="astro-mriontpf"> <a href="../workflows/index.html" class="astro-mriontpf"> <span class="astro-mriontpf">CIS Workflows</span>  </a> </li> </ul>  </details> </li> </ul>   <script aria-hidden="true">
+		(() => {
+			const scroller = document.getElementById('starlight__sidebar');
+			if (!window._starlightScrollRestore || !scroller) return;
+			scroller.scrollTop = window._starlightScrollRestore;
+			delete window._starlightScrollRestore;
+		})();
+	</script> </sl-sidebar-state-persist>  <div class="md:sl-hidden"> <div class="mobile-preferences sl-flex astro-lbnvevm2"> <div class="sl-flex social-icons astro-lbnvevm2"> <a href="https://discord.gg/gk8jAdXWmj" rel="me" class="sl-flex astro-vyr57y5k"><span class="sr-only astro-vyr57y5k">Discord</span><svg aria-hidden="true" class="astro-vyr57y5k astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M20.32 4.37a19.8 19.8 0 0 0-4.93-1.51 13.78 13.78 0 0 0-.64 1.28 18.27 18.27 0 0 0-5.5 0 12.64 12.64 0 0 0-.64-1.28h-.05A19.74 19.74 0 0 0 3.64 4.4 20.26 20.26 0 0 0 .11 18.09l.02.02a19.9 19.9 0 0 0 6.04 3.03l.04-.02a14.24 14.24 0 0 0 1.23-2.03.08.08 0 0 0-.05-.07 13.1 13.1 0 0 1-1.9-.92.08.08 0 0 1 .02-.1 10.2 10.2 0 0 0 .41-.31h.04a14.2 14.2 0 0 0 12.1 0l.04.01a9.63 9.63 0 0 0 .4.32.08.08 0 0 1-.03.1 12.29 12.29 0 0 1-1.9.91.08.08 0 0 0-.02.1 15.97 15.97 0 0 0 1.27 2.01h.04a19.84 19.84 0 0 0 6.03-3.05v-.03a20.12 20.12 0 0 0-3.57-13.69ZM8.02 15.33c-1.18 0-2.16-1.08-2.16-2.42 0-1.33.96-2.42 2.16-2.42 1.21 0 2.18 1.1 2.16 2.42 0 1.34-.96 2.42-2.16 2.42Zm7.97 0c-1.18 0-2.15-1.08-2.15-2.42 0-1.33.95-2.42 2.15-2.42 1.22 0 2.18 1.1 2.16 2.42 0 1.34-.94 2.42-2.16 2.42Z"/></svg></a><a href="https://github.com/bmad-code-org/bmad-module-creative-intelligence-suite" rel="me" class="sl-flex astro-vyr57y5k"><span class="sr-only astro-vyr57y5k">GitHub</span><svg aria-hidden="true" class="astro-vyr57y5k astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.08 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3Z"/></svg></a><a href="https://www.youtube.com/@BMadCode" rel="me" class="sl-flex astro-vyr57y5k"><span class="sr-only astro-vyr57y5k">YouTube</span><svg aria-hidden="true" class="astro-vyr57y5k astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M23.5 6.2A3 3 0 0 0 21.4 4c-1.9-.5-9.4-.5-9.4-.5s-7.5 0-9.4.5A3 3 0 0 0 .5 6.3C0 8 0 12 0 12s0 4 .5 5.8A3 3 0 0 0 2.6 20c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2c.5-2 .5-5.9.5-5.9s0-4-.5-5.8zm-14 9.4V8.4l6.3 3.6-6.3 3.6z"/></svg></a> </div> <starlight-theme-select>  <label style="--sl-select-width: 6.25em" class="astro-ybrh4trg"> <span class="sr-only astro-ybrh4trg">Select theme</span> <svg aria-hidden="true" class="icon label-icon astro-ybrh4trg astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg> <select autocomplete="off" class="astro-ybrh4trg"> <option value="dark" class="astro-ybrh4trg">Dark</option><option value="light" class="astro-ybrh4trg">Light</option><option value="auto" selected class="astro-ybrh4trg">Auto</option> </select> <svg aria-hidden="true" class="icon caret astro-ybrh4trg astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M17 9.17a1 1 0 0 0-1.41 0L12 12.71 8.46 9.17a1 1 0 1 0-1.41 1.42l4.24 4.24a1.002 1.002 0 0 0 1.42 0L17 10.59a1.002 1.002 0 0 0 0-1.42Z"/></svg> </label>  </starlight-theme-select>  <script>
+	StarlightThemeProvider.updatePickers();
+</script>   </div>  </div> </div> </div> </nav> <div class="main-frame astro-rvnnnu4j">  <script type="module">const a=document.getElementById("starlight__sidebar"),n=a?.querySelector("sl-sidebar-state-persist"),o="sl-sidebar-state",i=()=>{let t=[];const e=n?.dataset.hash||"";try{const s=sessionStorage.getItem(o),r=JSON.parse(s||"{}");Array.isArray(r.open)&&r.hash===e&&(t=r.open)}catch{}return{hash:e,open:t,scroll:a?.scrollTop||0}},c=t=>{try{sessionStorage.setItem(o,JSON.stringify(t))}catch{}},d=()=>c(i()),l=(t,e)=>{const s=i();s.open[e]=t,c(s)};n?.addEventListener("click",t=>{if(!(t.target instanceof Element))return;const e=t.target.closest("summary")?.closest("details");if(!e)return;const s=e.querySelector("sl-sidebar-restore"),r=parseInt(s?.dataset.index||"");isNaN(r)||l(!e.open,r)});addEventListener("visibilitychange",()=>{document.visibilityState==="hidden"&&d()});addEventListener("pageHide",d);</script> <div class="lg:sl-flex astro-bzigw26f"> <aside class="right-sidebar-container print:hidden astro-bzigw26f"> <div class="right-sidebar astro-bzigw26f"> <script type="module" src="../../_astro/MobileTableOfContents.astro_astro_type_script_index_0_lang.hwBsy0Mo.js"></script><script type="module" src="../../_astro/TableOfContents.astro_astro_type_script_index_0_lang.FuRcXuRY.js"></script><div class="lg:sl-hidden astro-owjyorkc"><mobile-starlight-toc data-min-h="2" data-max-h="3" class="astro-mcze5bvs"><nav aria-labelledby="starlight__on-this-page--mobile" class="astro-mcze5bvs"><details id="starlight__mobile-toc" class="astro-mcze5bvs"><summary id="starlight__on-this-page--mobile" class="sl-flex astro-mcze5bvs"><span class="toggle sl-flex astro-mcze5bvs">On this page<svg aria-hidden="true" class="caret astro-mcze5bvs astro-4hvhaky6" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></span><span class="display-current astro-mcze5bvs"></span></summary><div class="dropdown astro-mcze5bvs"><ul class="isMobile astro-je4ajvd4" style="--depth: 0;"> <li class="astro-je4ajvd4" style="--depth: 0;"> <a href="index.html#_top" class="astro-je4ajvd4" style="--depth: 0;"> <span class="astro-je4ajvd4" style="--depth: 0;">Overview</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 0;"> <a href="index.html#agents-catalog" class="astro-je4ajvd4" style="--depth: 0;"> <span class="astro-je4ajvd4" style="--depth: 0;">Agents Catalog</span> </a> <ul class="isMobile astro-je4ajvd4" style="--depth: 1;"> <li class="astro-je4ajvd4" style="--depth: 1;"> <a href="index.html#carson--brainstorming-coach" class="astro-je4ajvd4" style="--depth: 1;"> <span class="astro-je4ajvd4" style="--depth: 1;">Carson — Brainstorming Coach</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 1;"> <a href="index.html#maya--design-thinking-coach" class="astro-je4ajvd4" style="--depth: 1;"> <span class="astro-je4ajvd4" style="--depth: 1;">Maya — Design Thinking Coach</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 1;"> <a href="index.html#victor--innovation-strategist" class="astro-je4ajvd4" style="--depth: 1;"> <span class="astro-je4ajvd4" style="--depth: 1;">Victor — Innovation Strategist</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 1;"> <a href="index.html#dr-quinn--creative-problem-solver" class="astro-je4ajvd4" style="--depth: 1;"> <span class="astro-je4ajvd4" style="--depth: 1;">Dr. Quinn — Creative Problem Solver</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 1;"> <a href="index.html#sophia--storyteller" class="astro-je4ajvd4" style="--depth: 1;"> <span class="astro-je4ajvd4" style="--depth: 1;">Sophia — Storyteller</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 1;"> <a href="index.html#caravaggio--presentation-master" class="astro-je4ajvd4" style="--depth: 1;"> <span class="astro-je4ajvd4" style="--depth: 1;">Caravaggio — Presentation Master</span> </a>  </li> </ul>  </li><li class="astro-je4ajvd4" style="--depth: 0;"> <a href="index.html#creative-squad-team" class="astro-je4ajvd4" style="--depth: 0;"> <span class="astro-je4ajvd4" style="--depth: 0;">Creative Squad Team</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 0;"> <a href="index.html#agent-loading-commands" class="astro-je4ajvd4" style="--depth: 0;"> <span class="astro-je4ajvd4" style="--depth: 0;">Agent Loading Commands</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 0;"> <a href="index.html#communication-styles" class="astro-je4ajvd4" style="--depth: 0;"> <span class="astro-je4ajvd4" style="--depth: 0;">Communication Styles</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 0;"> <a href="index.html#next-steps" class="astro-je4ajvd4" style="--depth: 0;"> <span class="astro-je4ajvd4" style="--depth: 0;">Next Steps</span> </a>  </li> </ul> </div></details></nav></mobile-starlight-toc></div><div class="right-sidebar-panel sl-hidden lg:sl-block astro-owjyorkc"><div class="sl-container astro-owjyorkc"><starlight-toc data-min-h="2" data-max-h="3"><nav aria-labelledby="starlight__on-this-page"><h2 id="starlight__on-this-page">On this page</h2><ul class="astro-je4ajvd4" style="--depth: 0;"> <li class="astro-je4ajvd4" style="--depth: 0;"> <a href="index.html#_top" class="astro-je4ajvd4" style="--depth: 0;"> <span class="astro-je4ajvd4" style="--depth: 0;">Overview</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 0;"> <a href="index.html#agents-catalog" class="astro-je4ajvd4" style="--depth: 0;"> <span class="astro-je4ajvd4" style="--depth: 0;">Agents Catalog</span> </a> <ul class="astro-je4ajvd4" style="--depth: 1;"> <li class="astro-je4ajvd4" style="--depth: 1;"> <a href="index.html#carson--brainstorming-coach" class="astro-je4ajvd4" style="--depth: 1;"> <span class="astro-je4ajvd4" style="--depth: 1;">Carson — Brainstorming Coach</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 1;"> <a href="index.html#maya--design-thinking-coach" class="astro-je4ajvd4" style="--depth: 1;"> <span class="astro-je4ajvd4" style="--depth: 1;">Maya — Design Thinking Coach</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 1;"> <a href="index.html#victor--innovation-strategist" class="astro-je4ajvd4" style="--depth: 1;"> <span class="astro-je4ajvd4" style="--depth: 1;">Victor — Innovation Strategist</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 1;"> <a href="index.html#dr-quinn--creative-problem-solver" class="astro-je4ajvd4" style="--depth: 1;"> <span class="astro-je4ajvd4" style="--depth: 1;">Dr. Quinn — Creative Problem Solver</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 1;"> <a href="index.html#sophia--storyteller" class="astro-je4ajvd4" style="--depth: 1;"> <span class="astro-je4ajvd4" style="--depth: 1;">Sophia — Storyteller</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 1;"> <a href="index.html#caravaggio--presentation-master" class="astro-je4ajvd4" style="--depth: 1;"> <span class="astro-je4ajvd4" style="--depth: 1;">Caravaggio — Presentation Master</span> </a>  </li> </ul>  </li><li class="astro-je4ajvd4" style="--depth: 0;"> <a href="index.html#creative-squad-team" class="astro-je4ajvd4" style="--depth: 0;"> <span class="astro-je4ajvd4" style="--depth: 0;">Creative Squad Team</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 0;"> <a href="index.html#agent-loading-commands" class="astro-je4ajvd4" style="--depth: 0;"> <span class="astro-je4ajvd4" style="--depth: 0;">Agent Loading Commands</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 0;"> <a href="index.html#communication-styles" class="astro-je4ajvd4" style="--depth: 0;"> <span class="astro-je4ajvd4" style="--depth: 0;">Communication Styles</span> </a>  </li><li class="astro-je4ajvd4" style="--depth: 0;"> <a href="index.html#next-steps" class="astro-je4ajvd4" style="--depth: 0;"> <span class="astro-je4ajvd4" style="--depth: 0;">Next Steps</span> </a>  </li> </ul> </nav></starlight-toc></div></div> </div> </aside> <div class="main-pane astro-bzigw26f">  <main data-pagefind-body class="astro-zmwf737p" lang="en" dir="ltr">    <div class="content-panel astro-rrqqgiiu"> <div class="sl-container astro-rrqqgiiu"> <h1 id="_top" class="astro-6wgcxa2r">CIS Agents</h1>  </div> </div>  <div class="content-panel astro-rrqqgiiu"> <div class="sl-container astro-rrqqgiiu"> <div class="sl-markdown-content"> <p>Catalog of all CIS agents with their commands, purposes, and key capabilities.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="agents-catalog">Agents Catalog</h2><a class="sl-anchor-link" href="index.html#agents-catalog"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Agents Catalog”</span></a></div>
+<div class="sl-heading-wrapper level-h3"><h3 id="carson--brainstorming-coach">Carson — Brainstorming Coach</h3><a class="sl-anchor-link" href="index.html#carson--brainstorming-coach"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Carson — Brainstorming Coach”</span></a></div>
+<p><strong>Purpose:</strong> Generate diverse ideas using 36 proven techniques across 7 categories.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Value</th></tr></thead><tbody><tr><td><strong>Icon</strong></td><td>🧠</td></tr><tr><td><strong>Workflow</strong></td><td><code dir="auto">brainstorming</code></td></tr><tr><td><strong>Command</strong></td><td><code dir="auto">/cis-brainstorm</code></td></tr><tr><td><strong>Specialty</strong></td><td>Group dynamics, psychological safety, wild idea celebration</td></tr></tbody></table>
+<p><strong>Menu Triggers:</strong></p>
+<ul>
+<li><code dir="auto">BS</code> or fuzzy match on <code dir="auto">brainstorm</code></li>
+</ul>
+<p><strong>Key Capabilities:</strong></p>
+<ul>
+<li>36 ideation techniques across 7 categories</li>
+<li>Technique recommendation based on topic and context</li>
+<li>“Yes, and…” methodology that builds on ideas</li>
+<li>Progressive mode for comprehensive exploration</li>
+</ul>
+<hr>
+<div class="sl-heading-wrapper level-h3"><h3 id="maya--design-thinking-coach">Maya — Design Thinking Coach</h3><a class="sl-anchor-link" href="index.html#maya--design-thinking-coach"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Maya — Design Thinking Coach”</span></a></div>
+<p><strong>Purpose:</strong> Guide human-centered design through empathy, ideation, and prototyping.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Value</th></tr></thead><tbody><tr><td><strong>Icon</strong></td><td>🎨</td></tr><tr><td><strong>Workflow</strong></td><td><code dir="auto">design-thinking</code></td></tr><tr><td><strong>Command</strong></td><td><code dir="auto">/cis-design-thinking</code></td></tr><tr><td><strong>Specialty</strong></td><td>Empathy mapping, rapid prototyping, user-centered framing</td></tr></tbody></table>
+<p><strong>Menu Triggers:</strong></p>
+<ul>
+<li><code dir="auto">DT</code> or fuzzy match on <code dir="auto">design-thinking</code></li>
+</ul>
+<p><strong>Key Capabilities:</strong></p>
+<ul>
+<li>Five-phase design thinking facilitation</li>
+<li>Curated design methods library</li>
+<li>Divergent thinking before convergent action</li>
+<li>Human-centered problem reframing</li>
+</ul>
+<hr>
+<div class="sl-heading-wrapper level-h3"><h3 id="victor--innovation-strategist">Victor — Innovation Strategist</h3><a class="sl-anchor-link" href="index.html#victor--innovation-strategist"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Victor — Innovation Strategist”</span></a></div>
+<p><strong>Purpose:</strong> Identify disruption opportunities and architect business model innovation.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Value</th></tr></thead><tbody><tr><td><strong>Icon</strong></td><td>⚡</td></tr><tr><td><strong>Workflow</strong></td><td><code dir="auto">innovation-strategy</code></td></tr><tr><td><strong>Command</strong></td><td><code dir="auto">/cis-innovation-strategy</code></td></tr><tr><td><strong>Specialty</strong></td><td>Strategic disruption, business model innovation, Jobs-to-be-Done</td></tr></tbody></table>
+<p><strong>Menu Triggers:</strong></p>
+<ul>
+<li><code dir="auto">IS</code> or fuzzy match on <code dir="auto">innovation-strategy</code></li>
+</ul>
+<p><strong>Key Capabilities:</strong></p>
+<ul>
+<li>Jobs-to-be-Done analysis</li>
+<li>Blue Ocean Strategy application</li>
+<li>Disruptive Innovation framework</li>
+<li>Business Model Canvas design</li>
+</ul>
+<hr>
+<div class="sl-heading-wrapper level-h3"><h3 id="dr-quinn--creative-problem-solver">Dr. Quinn — Creative Problem Solver</h3><a class="sl-anchor-link" href="index.html#dr-quinn--creative-problem-solver"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Dr. Quinn — Creative Problem Solver”</span></a></div>
+<p><strong>Purpose:</strong> Systematic problem diagnosis and root cause analysis.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Value</th></tr></thead><tbody><tr><td><strong>Icon</strong></td><td>🔬</td></tr><tr><td><strong>Workflow</strong></td><td><code dir="auto">problem-solving</code></td></tr><tr><td><strong>Command</strong></td><td><code dir="auto">/cis-problem-solving</code></td></tr><tr><td><strong>Specialty</strong></td><td>TRIZ, Theory of Constraints, Systems Thinking, Five Whys</td></tr></tbody></table>
+<p><strong>Menu Triggers:</strong></p>
+<ul>
+<li><code dir="auto">PS</code> or fuzzy match on <code dir="auto">problem-solving</code></li>
+</ul>
+<p><strong>Key Capabilities:</strong></p>
+<ul>
+<li>Root cause identification</li>
+<li>Multiple analytical frameworks</li>
+<li>Solution evaluation matrix</li>
+<li>Implementation planning with risk mitigation</li>
+</ul>
+<hr>
+<div class="sl-heading-wrapper level-h3"><h3 id="sophia--storyteller">Sophia — Storyteller</h3><a class="sl-anchor-link" href="index.html#sophia--storyteller"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Sophia — Storyteller”</span></a></div>
+<p><strong>Purpose:</strong> Craft compelling narratives using proven story frameworks.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Value</th></tr></thead><tbody><tr><td><strong>Icon</strong></td><td>📖</td></tr><tr><td><strong>Workflow</strong></td><td><code dir="auto">storytelling</code></td></tr><tr><td><strong>Command</strong></td><td><code dir="auto">/cis-storytelling</code></td></tr><tr><td><strong>Specialty</strong></td><td>25 story frameworks, emotional psychology, narrative arcs</td></tr><tr><td><strong>Sidecar</strong></td><td>Yes — remembers story preferences and history</td></tr></tbody></table>
+<p><strong>Menu Triggers:</strong></p>
+<ul>
+<li><code dir="auto">ST</code> or fuzzy match on <code dir="auto">story</code></li>
+</ul>
+<p><strong>Key Capabilities:</strong></p>
+<ul>
+<li>25 story frameworks (Hero’s Journey, Story Brand, Three-Act, etc.)</li>
+<li>Emotional beat crafting</li>
+<li>Platform-specific adaptation</li>
+<li>Sidecar memory for personalization</li>
+</ul>
+<p><strong>Critical Actions:</strong></p>
+<ul>
+<li>Loads user preferences from sidecar</li>
+<li>Reviews story history for consistency</li>
+</ul>
+<hr>
+<div class="sl-heading-wrapper level-h3"><h3 id="caravaggio--presentation-master">Caravaggio — Presentation Master</h3><a class="sl-anchor-link" href="index.html#caravaggio--presentation-master"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Caravaggio — Presentation Master”</span></a></div>
+<p><strong>Purpose:</strong> Structure and deliver persuasive presentations (workflows in development).</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Value</th></tr></thead><tbody><tr><td><strong>Icon</strong></td><td>🎨</td></tr><tr><td><strong>Workflows</strong></td><td>Coming soon</td></tr><tr><td><strong>Specialty</strong></td><td>Visual hierarchy, presentation design, information design</td></tr></tbody></table>
+<p><strong>Planned Menu Triggers:</strong></p>
+<ul>
+<li><code dir="auto">SD</code> — Slide decks</li>
+<li><code dir="auto">EX</code> — YouTube/video explainers</li>
+<li><code dir="auto">PD</code> — Pitch decks</li>
+<li><code dir="auto">CT</code> — Conference talks</li>
+<li><code dir="auto">IN</code> — Infographics</li>
+<li><code dir="auto">VM</code> — Visual metaphors</li>
+<li><code dir="auto">CV</code> — Concept visuals</li>
+</ul>
+<p><strong>Key Capabilities:</strong></p>
+<ul>
+<li>Multi-slide presentation design</li>
+<li>Visual hierarchy expertise</li>
+<li>Platform-specific presentation design</li>
+<li>Information visualization</li>
+</ul>
+<hr>
+<div class="sl-heading-wrapper level-h2"><h2 id="creative-squad-team">Creative Squad Team</h2><a class="sl-anchor-link" href="index.html#creative-squad-team"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Creative Squad Team”</span></a></div>
+<p><strong>Purpose:</strong> Cross-functional creative sessions combining multiple agents.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Attribute</th><th>Value</th></tr></thead><tbody><tr><td><strong>Name</strong></td><td>Creative Squad</td></tr><tr><td><strong>Icon</strong></td><td>🎨</td></tr><tr><td><strong>Agents</strong></td><td>All CIS agents</td></tr><tr><td><strong>Use Case</strong></td><td>Comprehensive creative development from ideation through narrative</td></tr></tbody></table>
+<div class="sl-heading-wrapper level-h2"><h2 id="agent-loading-commands">Agent Loading Commands</h2><a class="sl-anchor-link" href="index.html#agent-loading-commands"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Agent Loading Commands”</span></a></div>
+<p>Load any agent directly for conversation without triggering a workflow:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Agent</th></tr></thead><tbody><tr><td><code dir="auto">/cis-agent-brainstorming-coach</code></td><td>Carson</td></tr><tr><td><code dir="auto">/cis-agent-design-thinking-coach</code></td><td>Maya</td></tr><tr><td><code dir="auto">/cis-agent-innovation-strategist</code></td><td>Victor</td></tr><tr><td><code dir="auto">/cis-agent-creative-problem-solver</code></td><td>Dr. Quinn</td></tr><tr><td><code dir="auto">/cis-agent-storyteller</code></td><td>Sophia</td></tr><tr><td><code dir="auto">/cis-agent-presentation-master</code></td><td>Caravaggio</td></tr></tbody></table>
+<div class="sl-heading-wrapper level-h2"><h2 id="communication-styles">Communication Styles</h2><a class="sl-anchor-link" href="index.html#communication-styles"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Communication Styles”</span></a></div>
+<p>Each agent has a distinct communication style that shapes their facilitation:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Agent</th><th>Style</th></tr></thead><tbody><tr><td><strong>Carson</strong></td><td>Enthusiastic improv coach — “Yes, and!” energy</td></tr><tr><td><strong>Maya</strong></td><td>Jazz musician — improvises, sensory metaphors</td></tr><tr><td><strong>Victor</strong></td><td>Chess grandmaster — bold declarations, strategic questions</td></tr><tr><td><strong>Dr. Quinn</strong></td><td>Sherlock Holmes meets scientist — deductive, curious</td></tr><tr><td><strong>Sophia</strong></td><td>Master bard — flowery, enrapturing narrative</td></tr><tr><td><strong>Caravaggio</strong></td><td>Creative director — energetic, sarcastic wit</td></tr></tbody></table>
+<div class="sl-heading-wrapper level-h2"><h2 id="next-steps">Next Steps</h2><a class="sl-anchor-link" href="index.html#next-steps"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Next Steps”</span></a></div>
+<ul>
+<li><strong><a href="../../tutorials/getting-started/index.html">Getting Started</a></strong> — Try your first agent workflow</li>
+<li><strong><a href="../workflows/index.html">Workflows Reference</a></strong> — Deep dive into workflow mechanics</li>
+</ul> </div> <footer class="sl-flex astro-zbqvr5oy"> <div class="meta sl-flex astro-zbqvr5oy">   </div> <div class="pagination-links print:hidden astro-v3a3mpg6" dir="ltr">   </div>   </footer>  </div> </div>   </main> </div> </div>  </div> </div>  </body></html>
