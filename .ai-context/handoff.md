@@ -2,6 +2,7 @@
 
 > Read this handoff and [the delivery review](delivery-review.md), including the approval table.
 > Use [the tested beta](delivery-beta/REPORT.md) for the implemented baseline.
+> See [the live recovery trials](delivery-beta/LIVE-RECOVERY.md) for the latest Mode C results.
 > Check the owner's latest message for explicit upgrade approvals. Carry forward A/B/C authority and the original acceptance checks.
 > Start at next action 1. Publication of this handoff authorizes documentation delivery only.
 
@@ -19,7 +20,7 @@ Decisions [V] Keep modes A/B/C, adaptive routing as the goal, two native workflo
 Rejected alternatives [V] Simulated approval for live owner decisions; counting a workflow name as execution; using an unverified relay for private inputs. See review and pilot archive.
 Assumptions [I] Reliable delegation and acceptance will improve owner trust more than immediate catalog expansion. U7 tests this with independent owner judgment.
 Open questions [U] Owner selects upgrades. For U7, owner selects a redacted real deliverable or synthetic-only assessment. For a later paid run, agent must verify model availability and cost before requesting approval.
-Verified [V] Mixed run replayed a saved receipt, produced SQL and a brief, and passed six checks. Fresh-install brief passed four checks. Review reproduced Mode B boundary and weak verification acceptance and traced a retry gap. See delivery-review.md and the evidence archive.
+Verified [V] Mixed run replayed a saved receipt, produced SQL and a brief, and passed six checks. Fresh-install brief passed four checks. Two v0.1.0 Mode C trials each replayed their saved build receipt and completed in four dispatches. All 13 checks passed. Review reproduced Mode B boundary and weak verification acceptance and traced a retry gap. See delivery-review.md and the evidence archive.
 Unverified [U] Real-owner first-pass acceptance, total nested spend and duplicate-free late-receipt recovery. U7, U5 and U4 respectively define proof.
 Next actions [V] 1. Read the approval table and check owner's explicit selections. 2. If pending, wait for selections. 3. Once approved, execute only selected upgrades with their dependencies resolved; report proof after each. If scope, risk or cost changes, stop for approval.
 Files/environment [V] Audited source 891b0063. See inventory below. This replaces the pilot-era next actions in the prior handoff.
@@ -31,7 +32,8 @@ Pending approvals [V] “approve all”, “approve U1, U3, U5”, or “approve
 
 - [Review and ranked upgrade plan](delivery-review.md) contains the verdict, F1–F11, all eight upgrades, dependencies, risks, budget, and approval table.
 - [Review evidence](delivery-review-evidence.zip) contains the cited local reports and specification, plus the handoff test result and a member checksum manifest. Extract beside the review for its links. Links inside historical reports may refer to additional files in the original project's output tree.
-- [Checksums](handoff-SHA256SUMS) cover this handoff, review and archive. Run `sha256sum -c handoff-SHA256SUMS` from this directory.
+- [Live recovery trials](delivery-beta/LIVE-RECOVERY.md) includes the follow-up results and links to the trial evidence.
+- [Checksums](handoff-SHA256SUMS) cover this handoff, the review, and the live trial evidence. Run `sha256sum -c handoff-SHA256SUMS` from this directory.
 - Earlier evidence remains in [the pilot archive](pilot-evidence.zip) and [beta verification report](delivery-beta/REPORT.md).
 
 [V] Cold-read check: the baseline is 891b0063, native execution covers Build Auto and Product Brief, and implementation awaits the owner's upgrade selection.
