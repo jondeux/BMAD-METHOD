@@ -54,11 +54,30 @@ REVIEW_FILES = (
 
 INSTALL = """# Install the local BMad delivery beta
 
-Use Python 3.11 or newer, uv for native workflow dependencies, and a Codex workspace agent
-with access to the project files, native tools, and your configured model provider.
+Use Python 3.11 or later on a POSIX host. Native delivery needs `uv` for workflow
+dependencies and an authorized workspace agent with access to the project, native
+workflow tools, and review subagents. Start native runs from that agent so it can
+serve each build job. The standard `--codex` launcher needs the `codex` executable
+on `PATH` and a configured model provider. Prepared native jobs use English for
+communication and documents.
 
-Extract the ZIP to a new directory. Verify its manifest there with `sha256sum -c SHA256SUMS`.
-Then open a terminal in the project that should use the skill, and copy it into that project.
+| Request | Native route |
+| --- | --- |
+| Code | Build Auto |
+| Document | Product Brief |
+| Code and document | Build Auto, then Product Brief |
+
+The beta delivers run-local UTF-8 text files. The 4 MiB limit applies to each complete
+serialized JSON receipt, including all files and metadata in that receipt. When
+`--codex` verifies mixed delivery, its job must fit both builds' artifacts, the
+request, and metadata within 8 MiB. Requests for a binary file or a different
+native workflow need a separately agreed route or deliverable before dispatch.
+
+## Install the skill
+
+Extract the ZIP to a new directory. Use `sha256sum -c SHA256SUMS` there to verify
+the manifest, or `shasum -a 256 -c SHA256SUMS` if your host has `shasum`. Then open
+a terminal in the project that should use the skill, and copy it into that project.
 
 ```bash
 test ! -e .agents/skills/bmad-deliver &&
@@ -67,21 +86,42 @@ mkdir -p .agents/skills &&
 cp -R /absolute/path/to/extracted/bmad-deliver .agents/skills/
 ```
 
-Open a fresh Codex session in the project and invoke the skill with an idea or source file.
-
-```text
-$bmad-deliver Turn my intake notes into an internal decision brief.
-Mode C. Use only these notes and keep the draft local.
-```
-
-Include the behaviors that the output must demonstrate. For Mode A, approve the proposed deliverable
-before any native build. For Mode B, state the delegated outcome and limits. Mode C preserves the
+Open a fresh workspace agent session in the project. Invoke `$bmad-deliver` with the
+intended deliverable and observable checks. For Mode A, approve the proposal before
+the build. For Mode B, state the delegated outcome and limits. Mode C preserves the
 named deliverable.
 
-The beta includes the native Build Auto, Product Brief, and review workflow files. For native runs,
-start from the workspace agent so it can serve the jobs and record actual evidence. Use the same skill
-with the saved run path to resume. See `bmad-deliver/references/run-record.md` and
-`bmad-deliver/references/native-host.md` for the terminal and host interfaces.
+## Try an example
+
+**Supported document.** Expect Product Brief to produce a local Markdown brief.
+
+```text
+$bmad-deliver Mode C. Write decision-brief.md for an internal booking trial.
+State that the simulation omitted false releases and name the facilities director
+as the proposed decision owner. Verify both statements. Keep the brief local.
+```
+
+**Supported code.** Expect Build Auto to produce a local Python file. Make sure the
+verification worker can execute Python before starting. If needed, configure an
+[independent checker](bmad-deliver/references/run-record.md#start-inspect-and-resume).
+
+```text
+$bmad-deliver Mode C. Write a local capacity.py that defines remaining(capacity, booked)
+for nonnegative integers. Return the remaining seats, floored at zero. Verify that
+remaining(10, 6) returns 4 and remaining(4, 6) returns 0.
+```
+
+**Outside native scope.** The requested file needs a binary-capable workflow. Choose
+a separate workflow for the slide deck or agree to a Markdown outline before starting
+a delivery run.
+
+```text
+$bmad-deliver Mode C. Deliver a finished slide deck as a .pptx file.
+```
+
+To resume, give the same skill the saved run path. See the
+[run and receipt contract](bmad-deliver/references/run-record.md) and
+[workspace host instructions](bmad-deliver/references/native-host.md).
 """
 
 

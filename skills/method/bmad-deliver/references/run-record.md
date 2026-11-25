@@ -1,14 +1,39 @@
 # Run a delivery
 
-Use Python 3.11+ on a POSIX host and a new run directory whose parent already exists. The single command supports `start`, `status`, and `resume`. Run the script by its path from the workspace, substituting the installed skill directory as needed.
+## Beta capabilities
+
+Use Python 3.11 or later on a POSIX host. For native delivery, use `uv` for workflow dependencies and an authorized workspace agent that can serve native jobs, run workflow tools, and launch workflow review subagents. The prepared native workspace uses English for communication and documents. A trusted executable integration can serve native jobs with `--native-worker`.
+
+| Request kind | Native workflow |
+| --- | --- |
+| `code` | Build Auto |
+| `non-code` | Product Brief |
+| `mixed` | Build Auto, then Product Brief |
+
+Native delivery covers these workflows. Review supports their internal steps. For a request requiring another native workflow, agree on a supported route or arrange the additional workflow separately before dispatch.
+
+The controller publishes run-local UTF-8 text files under `artifacts/`. Each complete serialized JSON receipt can be at most 4 MiB, including all artifact contents, paths, and metadata in that receipt. Leave room for JSON escaping. The `--codex` adapter reads up to 8 MiB per job. When it verifies a mixed run, the job includes both builds' artifacts, the original request, and job metadata. Size the combined output for that limit. Binary deliverables, deployment, and integration into an existing worktree require a separate workflow.
+
+## Start, inspect, and resume
+
+Use a new run directory whose parent already exists. For a native run, start the controller in the background so the workspace agent can [serve its jobs](native-host.md). The commands below assume the project has an installed skill and a `request.json` file. In a source checkout, set `delivery` to `skills/method/bmad-deliver/scripts/deliver.py`.
 
 ```bash
-python3 skills/method/bmad-deliver/scripts/deliver.py start _bmad-output/check-in-run --request request.json --codex
-python3 skills/method/bmad-deliver/scripts/deliver.py status _bmad-output/check-in-run
-python3 skills/method/bmad-deliver/scripts/deliver.py resume _bmad-output/check-in-run
+delivery="$PWD/.agents/skills/bmad-deliver/scripts/deliver.py"
+mkdir -p _bmad-output
+python3 "$delivery" start _bmad-output/check-in-run --request request.json --codex --native-host &
 ```
 
-`--codex` uses the configured Codex CLI provider for a fresh read-only session per stage. Add `--model` or `--effort` if the selected provider supports those values. When the CLI rejects its configured default, select an explicitly supported model. The live test used `--model gpt-5.6-luna --effort medium`. Source text is sent to that provider. Use authorized source material. The selected model and provider configuration are subject to the host. A local integration can instead supply `--worker /path/to/trusted-executable`. Use [native dispatch](native-host.md) when the run must execute Build Auto or Product Brief through an authorized host. Use `--verify-worker /path/to/trusted-checker` to keep routing and building with the main worker while delegating the verification phase to an independent local checker. It receives the same job and receipt paths, checks the actual generated files, and consumes one call. Give the checker an execution environment suitable for the artifact language.
+Once the controller and workers stop, use `status` to read the saved result. To continue a native run when its gate permits, resume the same run from the workspace agent and serve its pending jobs.
+
+```bash
+python3 "$delivery" status _bmad-output/check-in-run
+python3 "$delivery" resume _bmad-output/check-in-run &
+```
+
+Choose `--codex` or `--worker /path/to/trusted-executable` to supply a worker, including when using native builds. `--codex` requires the `codex` executable on `PATH` and a configured provider. It opens a fresh read-only session for each stage it handles. Use source material authorized for that provider. Add `--model` or `--effort` when supported by the provider.
+
+The controller dispatches verification after the native builds. For executable checks, ensure the verifier can run the required commands. Use `--verify-worker /path/to/trusted-checker` to delegate verification to an independent local checker with access to the required runtime. It receives the job and receipt paths, checks the generated files, and consumes one dispatch.
 
 ## Request
 
@@ -46,13 +71,13 @@ Use `code`, `non-code`, or `mixed`. The intake kinds are `idea`, `literature`, `
 | `budget-exhausted` | Use `resume --budget NEW_TOTAL` after the owner extends the cap. |
 | `complete` | Read the files under `artifacts/` and the verification results from `status`. |
 
-A bare resume reuses committed receipts and advances stages with available budget. If the run stopped at the cap after an independent checker returned a failed result and you repaired that checker, use `resume --reverify --budget NEW_TOTAL` to test the same build again. The earlier attempt remains in the run record. Every dispatch consumes one unit, including verification, failed attempts and retries. A successful route, build and verification need three calls. The runner enforces the call cap before dispatch and a per-call timeout. Billed tokens are provider usage. The call cap is independent of token count. An executable check records the observed result. Verification failure or inapplicability leaves the check open. The controller allocates a repair attempt if budget remains. It publishes only when every check passes.
+A bare resume reuses committed receipts and advances stages with available budget. If the run stopped at the cap after an independent checker returned a failed result and you repaired that checker, use `resume --reverify --budget NEW_TOTAL` to test the same build again. The earlier attempt remains in the run record. Every dispatch consumes one unit, including verification, failed attempts, and retries. A native run needs three dispatches for code or documents, or four for mixed delivery, when every stage succeeds on its first attempt. The runner enforces the call cap before dispatch and a per-call timeout. Billed tokens are provider usage. The call cap is independent of token count. An executable check records the observed result. Verification failure or inapplicability leaves the check open. The controller allocates a repair attempt if budget remains. It publishes only when every check passes.
 
 ## Persisted record and worker interface
 
 The run contains a versioned `state.json`, `attempts/<number>/job.json`, the worker log and any committed `receipt.json`. State stores the original request, current budget and its extensions, phase, dispatches, owner answers and approvals, B replacements, verification results and published file hashes. The run lock also covers a subprocess that outlives the controller. A complete receipt is replayable. A missing or malformed receipt stops for an explicit retry.
 
-A trusted worker receives two arguments, the absolute job path and absolute receipt path, and runs in the attempt directory. It reads the job and writes a single JSON receipt using a temporary file, fsync and atomic rename. Treat the executable and its provider as part of the trusted environment. Limit effects to this delivery. The controller publishes UTF-8 files into the run directory when verified. Each receipt is at most 4 MiB.
+A trusted worker receives two arguments, the absolute job path and absolute receipt path, and runs in the attempt directory. It reads the job and writes a single JSON receipt using a temporary file, fsync and atomic rename. Treat the executable and its provider as part of the trusted environment. Limit effects to this delivery.
 
 The job has these fields at every phase:
 
