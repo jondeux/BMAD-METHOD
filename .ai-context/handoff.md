@@ -1,5 +1,9 @@
 # Autonomous BMAD delivery · Tier L · 2026-11-25
 
+## Delivery beta
+
+The resumable controller, native workflow integration, and local beta are available on this branch. Start with the [beta verification report](delivery-beta/REPORT.md) and [installation guide](delivery-beta/INSTALL.md). The pilot record below captures the earlier design and evidence.
+
 > Read this handoff and unpack pilot-evidence.zip. Run sha256sum -c SHA256SUMS there.
 > Preserve A/B/C authority and observable acceptance checks for code and non-code work.
 > Begin with next action 1 once implementation is authorized.

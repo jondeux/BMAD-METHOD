@@ -13,6 +13,7 @@ skills = [
   "bmad-build",
   "bmad-build-auto",
   "bmad-code-review",
+  "bmad-deliver",
   "bmad-project-context",
   "bmad-qa-generate-e2e-tests",
   "bmad-retrospective",
