@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import time
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -239,7 +240,16 @@ def workspace(tmp_path, monkeypatch):
 
 
 def prepare(
-    workspace, *, kind="non-code", mode="C", scenario="baseline", budget=3, authority=None, checks=None, timeout=15
+    workspace,
+    *,
+    kind="non-code",
+    mode="C",
+    scenario="baseline",
+    budget=3,
+    authority=None,
+    checks=None,
+    timeout=15,
+    languages=None,
 ):
     request = workspace / "request.json"
     if checks is None:
@@ -263,6 +273,7 @@ def prepare(
                 "checks": checks,
                 "budget": budget,
                 "timeout_seconds": timeout,
+                **(languages or {}),
             }
         )
     )
@@ -1096,12 +1107,107 @@ def test_explicit_retry_can_replace_an_invalid_late_receipt(workspace):
     assert (result["status"], [item["attempt"] for item in result["native_runs"]]) == ("complete", [3])
 
 
+@pytest.mark.parametrize("language", [" ", "English\nFrench", "English\x7f", ["French"]])
+def test_start_rejects_invalid_native_language_settings(workspace, language):
+    args = prepare(workspace, languages={"communication_language": language})
+    assert "communication_language must be a nonempty single-line language setting" in command(*args, expect=1)
+    assert not (workspace / "run").exists()
+
+
+def test_prepare_preserves_english_defaults_for_a_legacy_job(workspace):
+    directory = workspace / "old-run/attempts/1"
+    directory.mkdir(parents=True)
+    job = directory / "job.json"
+    job.write_text(
+        json.dumps(
+            {
+                "attempt": 1,
+                "phase": "build",
+                "native_workflow": "bmad-build-auto",
+                "request": {"communication_language": None, "document_output_language": "Old\ninput"},
+            }
+        )
+    )
+    native_host("prepare", job, "--bmad-root", str(REPO))
+    config = tomllib.loads((directory / "workspace/_bmad/config.toml").read_text())
+    assert config["core"]["communication_language"] == config["core"]["document_output_language"] == "English"
+
+
+def test_native_submission_enforces_the_complete_encoded_receipt_limit(workspace):
+    run = workspace / "run"
+    job = run / "attempts" / "2" / "job.json"
+    args = prepare(workspace, kind="code", budget=2, checks={"fixture": TYPED_CHECKS["decision"]})
+    limit = 4 * 1024 * 1024
+    with launch(*args, "--native-host") as controller:
+        try:
+            wait_for(job)
+            native_host("prepare", job, "--bmad-root", str(REPO))
+            prepared = job.parent / "workspace"
+            (prepared / "plan.md").write_text("---\nstatus: built\n---\n## Auto Run Result\n")
+            (prepared / "build.log").write_bytes(b"x" * (limit + 1))
+            notes = '"\\é\n' * 200_000
+            (prepared / "notes.txt").write_bytes(notes.encode("utf-8"))
+            baseline = {
+                "status": "ok",
+                "artifacts": [{"path": "notes.txt", "content": notes}, {"path": "code.py", "content": ""}],
+                "native": {
+                    "workflow": "bmad-build-auto",
+                    "status": "built",
+                    "evidence": dict.fromkeys(
+                        ("workspace/plan.md", "workspace/notes.txt", "workspace/code.py", "workspace/build.log"),
+                        "0" * 64,
+                    ),
+                    "artifact_sources": {"notes.txt": "workspace/notes.txt", "code.py": "workspace/code.py"},
+                },
+            }
+            overhead = len((json.dumps(baseline, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+            artifact = prepared / "code.py"
+            artifact.write_text("x" * (limit - overhead + 1))
+            submission = (
+                "submit",
+                job,
+                "--terminal",
+                "plan.md",
+                "--artifact",
+                "notes.txt=notes.txt",
+                "--artifact",
+                "code.py=code.py",
+                "--evidence",
+                "build.log",
+            )
+            error = native_host(*submission, expected=1)
+            assert f"{limit + 1} bytes" in error and "Reduce the artifact text" in error
+            receipt = job.with_name("receipt.json")
+            assert not receipt.exists()
+            artifact.write_text("x" * (limit - overhead))
+            native_host(*submission)
+            assert receipt.stat().st_size == limit
+            stdout, stderr = controller.communicate(timeout=10)
+            assert controller.returncode == 2, (stdout, stderr)
+            result = json.loads(stdout)
+            assert (result["status"], result["phase"], result["dispatched"]) == ("budget-exhausted", "verify", 2)
+        finally:
+            if controller.poll() is None:
+                controller.kill()
+
+
 @pytest.mark.parametrize("typed", [False, True])
 def test_native_mixed_replays_code_receipt_without_duplicate_work(workspace, typed):
     run = workspace / "run"
+    languages = (
+        {"communication_language": 'Français "Canada"', "document_output_language": "Português (Brasil)"}
+        if typed
+        else {}
+    )
     if typed:
         prepared = prepare(
-            workspace, kind="mixed", mode="A", budget=4, scenario=f"evidence\n{BRIEF_LIMITATION}", checks=TYPED_CHECKS
+            workspace,
+            kind="mixed",
+            mode="A",
+            budget=4,
+            scenario=f"evidence\n{BRIEF_LIMITATION}",
+            checks=TYPED_CHECKS,
+            languages=languages,
         )
         prepared += ["--verify-worker", str(workspace / "fixture-worker")]
     else:
@@ -1122,6 +1228,9 @@ def test_native_mixed_replays_code_receipt_without_duplicate_work(workspace, typ
         controller.wait(timeout=5)
     native_host("prepare", code_job, "--bmad-root", str(REPO))
     code_workspace = code_job.parent / "workspace"
+    config = tomllib.loads((code_workspace / "_bmad/config.toml").read_text(encoding="utf-8"))
+    for name in ("communication_language", "document_output_language"):
+        assert config["core"][name] == languages.get(name, "English")
     (code_workspace / "plan.md").write_text("---\nstatus: blocked\n---\n## Auto Run Result\n")
     sql_path = "availability.sql" if typed else "query.sql"
     sql_content = AVAILABILITY_SQL.replace("\n", "\r\n") if typed else "select 1;"
@@ -1154,6 +1263,8 @@ def test_native_mixed_replays_code_receipt_without_duplicate_work(workspace, typ
             assert packet["artifacts"] == [{"path": sql_path, "content": sql_content}]
             native_host("prepare", brief_job, "--bmad-root", str(REPO))
             document = brief_job.parent / "workspace"
+            document_config = tomllib.loads((document / "_bmad/config.toml").read_text(encoding="utf-8"))
+            assert document_config["core"] == config["core"]
             brief_content = (
                 f"Decision: trial manual recovery.\n{BRIEF_LIMITATION}\n"
                 if typed

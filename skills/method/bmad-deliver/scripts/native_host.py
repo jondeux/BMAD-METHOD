@@ -6,18 +6,21 @@
 
 import argparse
 import hashlib
+import json
 import re
 import shutil
 import sys
 import time
 from pathlib import Path
 
+from bundle_layout import RUNTIME_FILES
 from deliver import (
     BUILD_AUTO,
     MAX_JSON_BYTES,
     NATIVE_COMPLETION,
     VERIFICATION_VERSION,
     commit_receipt,
+    native_languages,
     pending_attempt,
     positive_int,
     read_json,
@@ -27,7 +30,6 @@ from deliver import (
 )
 
 BUNDLED_NATIVE = Path(__file__).resolve().parents[1] / "assets/native"
-SETUP_SCRIPTS = ("config_utils.py", "memlog.py", "render_skill.py", "resolve_config.py", "resolve_customization.py")
 
 
 def read_job(path):
@@ -41,18 +43,23 @@ def read_job(path):
     return job
 
 
-def workspace_file(workspace, name):
+def workspace_file(workspace, name, *, include_text=False):
     path = workspace / name
     require(
         path.is_relative_to(workspace) and path.resolve() == path and path.is_file(),
         f"expected a regular file in the native workspace: {name}",
     )
-    require(path.stat().st_size <= MAX_JSON_BYTES, f"native file exceeds the receipt limit: {name}")
+    if include_text:
+        require(
+            path.stat().st_size <= MAX_JSON_BYTES,
+            f"Native text file {name} exceeds {MAX_JSON_BYTES} bytes. Reduce the text and resubmit.",
+        )
     return path
 
 
 def setup(job_path, bmad_root):
     job = read_job(job_path)
+    languages = native_languages(job.get("native_languages", {}))
     run = job_path.parent.parent.parent
     if (run / "state.json").is_file():
         state = read_state(run)
@@ -62,18 +69,21 @@ def setup(job_path, bmad_root):
     require(not job_path.with_name("receipt.json").exists(), "native job already has a receipt")
     core = bmad_root / "skills/core-tools/bmad/scripts" if bmad_root else BUNDLED_NATIVE / "runtime"
     require(
-        all((core / name).is_file() for name in SETUP_SCRIPTS),
+        all((core / name).is_file() for name in RUNTIME_FILES),
         "missing native setup scripts. Use the beta bundle or supply --bmad-root with a matching checkout.",
     )
     workspace = job_path.parent / "workspace"
     scripts = workspace / "_bmad/scripts"
     scripts.mkdir(parents=True)
-    for name in SETUP_SCRIPTS:
+    for name in RUNTIME_FILES:
         shutil.copyfile(core / name, scripts / name)
+    language_config = "".join(
+        f"{name} = {json.dumps(value, ensure_ascii=False)}\n" for name, value in languages.items()
+    )
     (workspace / "_bmad/config.toml").write_text(
         '[core]\nproject_name = "Delivery"\noutput_folder = "{project-root}/_bmad-output"\n'
-        'communication_language = "English"\ndocument_output_language = "English"\n'
-        '[modules.bmm]\nplanning_artifacts = "{project-root}/_bmad-output/planning"\n'
+        + language_config
+        + '[modules.bmm]\nplanning_artifacts = "{project-root}/_bmad-output/planning"\n'
         'implementation_artifacts = "{project-root}/_bmad-output"\n',
         encoding="utf-8",
     )
@@ -107,7 +117,7 @@ def submit(job_path, terminal_name, artifact_specs, evidence_names):
     job = read_job(job_path)
     workspace = job_path.parent / "workspace"
     require(workspace.resolve() == workspace and workspace.is_dir(), "native workspace not initialized")
-    terminal = workspace_file(workspace, terminal_name)
+    terminal = workspace_file(workspace, terminal_name, include_text=True)
     workflow = job["native_workflow"]
     status, evidence = terminal_evidence(workflow, workspace, terminal)
     artifacts = []
@@ -116,7 +126,7 @@ def submit(job_path, terminal_name, artifact_specs, evidence_names):
     for spec in artifact_specs:
         published, separator, source = spec.partition("=")
         require(separator and published and source, "--artifact requires PUBLISHED_PATH=WORKSPACE_PATH")
-        path = workspace_file(workspace, source)
+        path = workspace_file(workspace, source, include_text=True)
         if versioned:
             content = path.read_bytes().decode("utf-8")
         else:
@@ -128,7 +138,10 @@ def submit(job_path, terminal_name, artifact_specs, evidence_names):
         require(evidence[1] in adopted_paths, "published artifacts must include the native Product Brief")
     validate_artifacts(artifacts)
     evidence.extend(workspace_file(workspace, name) for name in evidence_names)
-    files = {str(p.relative_to(job_path.parent)): hashlib.sha256(p.read_bytes()).hexdigest() for p in evidence}
+    files = {}
+    for path in dict.fromkeys(evidence):
+        with path.open("rb") as handle:
+            files[path.relative_to(job_path.parent).as_posix()] = hashlib.file_digest(handle, "sha256").hexdigest()
     receipt = {
         "status": "ok",
         "artifacts": artifacts,

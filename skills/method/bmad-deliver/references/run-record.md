@@ -2,7 +2,7 @@
 
 ## Beta capabilities
 
-Use Python 3.11 or later on a POSIX host. For native delivery, use `uv` for workflow dependencies and an authorized workspace agent that can serve native jobs, run workflow tools, and launch workflow review subagents. The prepared native workspace uses English for communication and documents. A trusted executable integration can serve native jobs with `--native-worker`.
+Use Python 3.11 or later on a POSIX host. For native delivery, use `uv` for workflow dependencies and an authorized workspace agent that can serve native jobs, run workflow tools, and launch workflow review subagents. The prepared native workspace uses the request's language settings and defaults each to English. A trusted executable integration can serve native jobs with `--native-worker`.
 
 | Request kind | Native workflow |
 | --- | --- |
@@ -12,7 +12,7 @@ Use Python 3.11 or later on a POSIX host. For native delivery, use `uv` for work
 
 Native delivery covers these workflows. Review supports their internal steps. For a request requiring another native workflow, agree on a supported route or arrange the additional workflow separately before dispatch.
 
-The controller publishes run-local UTF-8 text files under `artifacts/`. Each complete serialized JSON receipt can be at most 4 MiB, including all artifact contents, paths, and metadata in that receipt. Leave room for JSON escaping. The `--codex` adapter reads up to 8 MiB per job. When it verifies a mixed run, the job includes both builds' artifacts, the original request, and job metadata. Size the combined output for that limit. Binary deliverables, deployment, and integration into an existing worktree require a separate workflow.
+The controller publishes run-local UTF-8 text files under `artifacts/`. Each complete serialized JSON receipt can be at most 4 MiB, including all artifact contents, paths, and metadata in that receipt. The native helper checks the exact encoded size before submission. Reduce the text or omit optional outputs when the helper reports an oversized receipt. The `--codex` adapter reads up to 8 MiB per job. When it verifies a mixed run, the job includes both builds' artifacts, the original request, and job metadata. Size the combined output for that limit. Binary deliverables, deployment, and integration into an existing worktree require a separate workflow.
 
 ## Start, inspect, and resume
 
@@ -93,6 +93,10 @@ Every dispatched job contains the original request and checks, accumulated owner
 
 Use `code`, `non-code`, or `mixed`. The intake kinds are `idea`, `literature`, `brainstorm`, and `forge`. Set a positive worker-call budget and provide at least one acceptance check. The original checks are mandatory. Use stable IDs. For B supply explicit delegation limits. For C supply the named deliverable. For A request a specific proposal and approve it before building. When acceptance or authority requires information from a real stakeholder, the run waits for the owner.
 
+### Native language settings
+
+Set optional top-level `communication_language` and `document_output_language` strings in a new request. Use a nonempty single-line name such as `Français` or `Português (Brasil)`. The controller records the validated settings for native jobs. The native helper writes each value to the `[core]` table of the prepared workspace's `_bmad/config.toml`. An omitted setting defaults to `English`. Saved jobs from before language settings use their original English defaults. Pass the selected languages to native workflows that take their language from the conversation.
+
 ### Acceptance checks
 
 Use a `kind` and a `behavior` for each acceptance check in a new request.
@@ -159,6 +163,7 @@ The job has these fields at every phase:
 | `verification_version`, `verification_id`, `artifact_sha256` | Typed jobs carry version `2`. A verify job also carries a unique ID and the complete path-to-SHA-256 map for its artifact snapshot. |
 | `verification_artifact_sha256` | When present, identifies the earlier snapshot covered by the accompanying `verification` feedback. |
 | `native_workflows`, `native_workflow` | With native dispatch enabled, the ordered workflows for this run and the assigned workflow for a build job. |
+| `native_languages` | Validated language settings for a native build job. |
 | `budget_remaining_after_dispatch`, `timeout_seconds` | Unused calls after the current dispatch, and the time limit for this call. |
 
 Return one of the following receipts:

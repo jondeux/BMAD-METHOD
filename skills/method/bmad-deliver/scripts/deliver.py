@@ -53,6 +53,19 @@ def text_list(value):
     return isinstance(value, list) and all(map(text, value))
 
 
+def native_languages(request):
+    require(isinstance(request, dict), "native job request must be an object")
+    languages = {}
+    for field in ("communication_language", "document_output_language"):
+        value = request.get(field, "English")
+        require(
+            text(value) and value.splitlines() == [value] and not re.search(r"[\x00-\x1f\x7f\ud800-\udfff]", value),
+            f"{field} must be a nonempty single-line language setting",
+        )
+        languages[field] = value
+    return languages
+
+
 def positive_int(value):
     return type(value) is int and value > 0
 
@@ -72,8 +85,14 @@ def read_json(path, limit=MAX_JSON_BYTES):
     return json.loads(data)
 
 
-def write_json(path, value, *, replace=True):
+def write_json(path, value, *, replace=True, max_bytes=None):
     data = json.dumps(value, ensure_ascii=False, indent=2).encode() + b"\n"
+    if max_bytes is not None:
+        require(
+            len(data) <= max_bytes,
+            f"{path.name} is {len(data)} bytes. The limit is {max_bytes} bytes. "
+            "Reduce the artifact text or omit optional outputs, then resubmit.",
+        )
     fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}-")
     try:
         with os.fdopen(fd, "wb") as output:
@@ -128,7 +147,7 @@ def commit_receipt(job_path, result):
     with attempt_decision(directory):
         attempt = pending_attempt(read_state(directory.parent.parent))
         require(attempt is not None and directory.name == str(attempt["number"]), "attempt is closed for receipts")
-        write_json(job_path.with_name("receipt.json"), result, replace=False)
+        write_json(job_path.with_name("receipt.json"), result, replace=False, max_bytes=MAX_JSON_BYTES)
 
 
 def validate_boundaries(authority, kind):
@@ -176,6 +195,7 @@ def validate_checks(checks):
 
 def validate_request(request):
     require(isinstance(request, dict), "request must be an object")
+    native_languages(request)
     authority = request.get("authority")
     intake = request.get("intake")
     checks = request.get("checks")
@@ -474,6 +494,7 @@ class Delivery:
             job["native_workflows"] = workflows
             if phase == "build":
                 job["native_workflow"] = workflows[len(self.state["native_partial"])]
+                job["native_languages"] = self.state.get("native_languages", {})
         return job
 
     def dispatch_retry(self, phase):
@@ -924,6 +945,7 @@ def initial_state(args):
         "version": VERIFICATION_VERSION if versioned else 1,
         "started_at": time(),
         "request": request,
+        "native_languages": native_languages(request),
         "worker": worker,
         "native_worker": native_worker,
         "native_partial": [],
