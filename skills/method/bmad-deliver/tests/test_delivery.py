@@ -549,6 +549,25 @@ def test_status_reads_legacy_snapshot_without_changing_the_run(workspace):
     assert not (run / ".lock").exists()
 
 
+def test_new_dispatch_accounts_for_a_retry_staged_by_an_older_controller(workspace):
+    run = workspace / "run"
+    paused = command(*prepare(workspace, budget=2), expect=2)
+    assert (paused["status"], paused["phase"]) == ("budget-exhausted", "verify")
+    # Restore the state an earlier controller could save after selecting an interrupted build retry.
+    old = state(run)
+    old.pop("started_at")
+    old.pop("build_attempt")
+    old.update(status="ready", phase="build", budget=4)
+    old["attempts"] = [{key: attempt[key] for key in ("number", "phase", "status")} for attempt in old["attempts"]]
+    old["attempts"][1]["status"] = "invalid-receipt"
+    (run / "state.json").write_text(json.dumps(old))
+    result = command("resume", str(run))
+    assert result["status"] == "complete"
+    assert result["elapsed_seconds"] is None
+    assert result["retries"] == {"recorded": 1, "attempts_without_metadata": 2}
+    assert result["usage"]["attempts"][2]["retry"] == "interrupted"
+
+
 def start_typed(workspace, scenario="evidence", *, budget=3, checks=TYPED_CHECKS):
     return prepare(workspace, kind="mixed", scenario=f"{scenario}\n{BRIEF_LIMITATION}", budget=budget, checks=checks)
 
@@ -620,6 +639,8 @@ def test_repair_keeps_earlier_verdicts_bound_to_the_first_snapshot(workspace):
     assert first["verification_id"] != last["verification_id"]
     assert first["artifact_sha256"] != last["artifact_sha256"]
     assert result["verification_artifact_sha256"] == last["artifact_sha256"] == result["artifact_sha256"]
+    assert result["retries"]["recorded"] == 1
+    assert result["usage"]["attempts"][3]["retry"] == "artifact-repair"
 
 
 @pytest.mark.parametrize(
@@ -665,7 +686,9 @@ def test_publication_recovery_refuses_a_changed_verified_snapshot(workspace):
     assert "publication artifacts differ from the verified snapshot" in error
     assert not (run / "artifacts").exists()
     receipt.write_bytes(original)
-    assert command("resume", str(run)) == result
+    resumed = command("resume", str(run))
+    assert resumed["elapsed_seconds"] >= result["elapsed_seconds"]
+    assert resumed == {**result, "elapsed_seconds": resumed["elapsed_seconds"]}
 
 
 def test_inapplicable_check_stays_open_until_repaired(workspace):
@@ -750,6 +773,13 @@ elif phase == "verify":
 else:
     raise AssertionError(phase)
 Path(args[args.index("--output-last-message") + 1]).write_text(json.dumps(result))
+print(json.dumps({"type": "turn.completed", "usage": {
+    "input_tokens": {"route": 10, "build": 20, "verify": 30}[phase],
+    "cached_input_tokens": 2, "output_tokens": 1,
+}}))
+print(json.dumps({"type": "turn.completed", "usage": {
+    "input_tokens": 96665, "cached_input_tokens": 0, "output_tokens": 0,
+}}), file=sys.stderr)
 """
     )
     shim.chmod(0o700)
@@ -765,6 +795,16 @@ Path(args[args.index("--output-last-message") + 1]).write_text(json.dumps(result
     assert result["status"] == "complete"
     assert result["dispatched"] == 3
     assert result["verification"][0]["evidence"] == "The simulation omitted false releases."
+    usage = result["usage"]
+    observed_events = 2 if independent_verifier else 3
+    assert usage["observed_events"] == observed_events
+    assert usage["observed_tokens"]["input_tokens"] == (30 if independent_verifier else 60)
+    assert usage["observed_tokens"]["cached_input_tokens"] == observed_events * 2
+    assert [row["source"] for row in usage["attempts"][:observed_events]] == ["provider-stdout"] * observed_events
+    assert command("support", str(workspace / "run"))["usage"] == usage
+    attempt = workspace / "run" / "attempts" / "1"
+    assert "96665" in (attempt / "worker.log").read_text()
+    assert "96665" not in (attempt / "provider.jsonl").read_text()
     if typed:
         assert result["verification_artifact_sha256"] == result["artifact_sha256"]
 
@@ -811,6 +851,9 @@ def test_checker_fault_pauses_and_reverifies_the_same_build(workspace, typed, bu
     result = command(*retry)
     assert (result["status"], result["dispatched"]) == ("complete", 4)
     assert "error" not in result
+    assert result["elapsed_seconds"] >= 0
+    assert result["retries"] == {"recorded": 1, "attempts_without_metadata": 0}
+    assert result["usage"]["attempts"][3]["retry"] == "reverify"
     attempts = state(run)["attempts"]
     assert [(attempt["phase"], attempt["status"]) for attempt in attempts] == [
         ("route", "ok"),
@@ -975,6 +1018,8 @@ def test_native_retry_and_late_submissions_accept_only_one_build(workspace, conc
         result = command("resume", str(run))
         assert (result["status"], result["dispatched"]) == ("complete", 4)
         assert [item["attempt"] for item in result["native_runs"]] == [3]
+        assert result["usage"]["attempts"][2]["retry"] == "interrupted"
+        assert result["retries"]["recorded"] == 1
     accepted = [
         attempt for attempt in state(run)["attempts"] if attempt["phase"] == "build" and attempt["status"] == "ok"
     ]
@@ -1035,6 +1080,7 @@ sys.exit(main())
         assert controller.returncode == 0, (stdout, stderr)
     result = json.loads(stdout)
     assert (result["dispatched"], [item["attempt"] for item in result["native_runs"]]) == (3, [2])
+    assert result["retries"]["recorded"] == 0
 
 
 def test_explicit_retry_can_replace_an_invalid_late_receipt(workspace):

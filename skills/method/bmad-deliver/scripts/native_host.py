@@ -17,10 +17,13 @@ from deliver import (
     MAX_JSON_BYTES,
     NATIVE_COMPLETION,
     VERIFICATION_VERSION,
+    commit_receipt,
+    pending_attempt,
+    positive_int,
     read_json,
+    read_state,
     require,
     validate_artifacts,
-    write_json,
 )
 
 BUNDLED_NATIVE = Path(__file__).resolve().parents[1] / "assets/native"
@@ -30,7 +33,11 @@ SETUP_SCRIPTS = ("config_utils.py", "memlog.py", "render_skill.py", "resolve_con
 def read_job(path):
     job = read_json(path, limit=MAX_JSON_BYTES * 4)
     require(job.get("phase") == "build" and job.get("native_workflow") in NATIVE_COMPLETION, "not a native build job")
-    require(path.name == "job.json" and path.parent.name == str(job["attempt"]), "invalid native attempt path")
+    number = job.get("attempt")
+    require(
+        path.name == "job.json" and positive_int(number) and path.parent.name == str(number),
+        "invalid native attempt path",
+    )
     return job
 
 
@@ -45,7 +52,13 @@ def workspace_file(workspace, name):
 
 
 def setup(job_path, bmad_root):
-    read_job(job_path)
+    job = read_job(job_path)
+    run = job_path.parent.parent.parent
+    if (run / "state.json").is_file():
+        state = read_state(run)
+        if job["attempt"] <= len(state["attempts"]):
+            pending = pending_attempt(state)
+            require(pending is not None and pending["number"] == job["attempt"], "attempt is closed for preparation")
     require(not job_path.with_name("receipt.json").exists(), "native job already has a receipt")
     core = bmad_root / "skills/core-tools/bmad/scripts" if bmad_root else BUNDLED_NATIVE / "runtime"
     require(
@@ -126,7 +139,7 @@ def submit(job_path, terminal_name, artifact_specs, evidence_names):
             artifact["path"]: path.relative_to(job_path.parent).as_posix()
             for artifact, path in zip(artifacts, adopted_paths, strict=True)
         }
-    write_json(job_path.with_name("receipt.json"), receipt, replace=False)
+    commit_receipt(job_path, receipt)
 
 
 def main():
@@ -165,7 +178,7 @@ def main():
         else:
             read_job(job_path)
             require(bool(args.reason.strip()), "native failure reason is required")
-            write_json(job_path.with_name("receipt.json"), {"status": "failed", "error": args.reason}, replace=False)
+            commit_receipt(job_path, {"status": "failed", "error": args.reason})
     except (OSError, ValueError, KeyError) as exc:
         print(f"Native BMad host: {exc}", file=sys.stderr)
         return 1

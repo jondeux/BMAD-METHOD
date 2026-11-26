@@ -19,7 +19,10 @@ import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
+from time import time
 from uuid import uuid4
+
+from run_metrics import run_metrics, support_summary
 
 MAX_JSON_BYTES = 4 * 1024 * 1024
 ATTEMPT_VERSION = 1
@@ -92,6 +95,11 @@ def read_state(run):
         isinstance(state, dict) and state.get("version") in (1, VERIFICATION_VERSION), "unsupported run state version"
     )
     require(state.get("attempt_version", 0) in (0, ATTEMPT_VERSION), "unsupported attempt version")
+    attempts = state.get("attempts")
+    require(
+        isinstance(attempts, list) and all(isinstance(attempt, dict) for attempt in attempts),
+        "invalid attempts in run state",
+    )
     return state
 
 
@@ -468,6 +476,21 @@ class Delivery:
                 job["native_workflow"] = workflows[len(self.state["native_partial"])]
         return job
 
+    def dispatch_retry(self, phase):
+        requested = self.state.pop("next_retry", None)
+        attempts = self.state["attempts"]
+        if requested is not None or not attempts:
+            return requested
+        previous = attempts[-1]
+        if previous["phase"] == "verify" and phase == "build":
+            return "artifact-repair"
+        if previous["phase"] == phase:
+            if previous["status"] in ("no-receipt", "invalid-receipt", "failed", "superseded"):
+                return "interrupted"
+            if phase == "verify" and previous.get("verifier") and previous["status"] in ("ok", "checker-fault"):
+                return "reverify"
+        return None
+
     def dispatch(self):
         num = len(self.state["attempts"]) + 1
         path = self.receipt(num).parent
@@ -481,7 +504,8 @@ class Delivery:
         verifier = self.state.get("verifier") if job["phase"] == "verify" else None
         workflow = job.get("native_workflow")
         worker = self.state["native_worker"] if workflow else verifier or self.state["worker"]
-        attempt = {"number": num, "phase": job["phase"], "status": "dispatched"}
+        retry = self.dispatch_retry(job["phase"])
+        attempt = {"number": num, "phase": job["phase"], "status": "dispatched", "started_at": time(), "retry": retry}
         if "verification_id" in job:
             attempt.update(verification_id=job["verification_id"], artifact_sha256=job["artifact_sha256"])
         if workflow:
@@ -637,7 +661,7 @@ class Delivery:
         receipt = self.receipt(attempt["number"])
         if not receipt.exists():
             if attempt["status"] == "dispatched":
-                attempt["status"] = "no-receipt"
+                attempt.update(status="no-receipt", resolved_at=time())
                 self.state.update(status="interrupted", error=f"No durable receipt for attempt {attempt['number']}")
                 self.save()
             return False
@@ -651,6 +675,7 @@ class Delivery:
         except (OSError, ValueError, KeyError) as exc:
             attempt["status"] = "invalid-receipt"
             self.state.update(status="interrupted", error=f"Invalid worker receipt: {exc}")
+        attempt["resolved_at"] = time()
         self.save()
         return attempt["status"] != "invalid-receipt"
 
@@ -673,7 +698,7 @@ class Delivery:
                     return
                 attempt["status"] = "superseded"
             self.state.pop("error", None)
-            self.state["status"] = "ready"
+            self.state.update(status="ready", next_retry="interrupted")
             self.save()
 
     def advance(self):
@@ -683,7 +708,7 @@ class Delivery:
             if self.state["phase"] == "publish":
                 expected = self.state["verification_artifact_sha256"] if self.versioned_checks else None
                 hashes = publish(self.run, self.artifacts(), expected_hashes=expected)
-                self.state.update(status="complete", artifact_sha256=hashes)
+                self.state.update(status="complete", artifact_sha256=hashes, completed_at=time())
                 self.save()
                 return
             if len(self.state["attempts"]) == self.state["budget"]:
@@ -754,7 +779,7 @@ class Delivery:
             self.retry()
         if args.reverify:
             self.state.pop("error", None)
-            self.state.update(phase="verify", status="ready")
+            self.state.update(phase="verify", status="ready", next_retry="reverify")
         self.save()
         self.advance()
 
@@ -798,6 +823,7 @@ class Delivery:
             }
             summary["pending_attempt"]["job"] = str(self.receipt(pending["number"]).with_name("job.json"))
         summary["next_action"] = self.next_action(status, pending)
+        summary.update(run_metrics(self.run, state))
         return summary
 
     def next_action(self, status, pending):
@@ -864,6 +890,7 @@ def parse_args():
     )
     resume.add_argument("--budget", type=int, metavar="NEW_TOTAL")
     subcommands.add_parser("status").add_argument("run", type=Path)
+    subcommands.add_parser("support", help="print a content-free support summary").add_argument("run", type=Path)
     return parser.parse_args()
 
 
@@ -895,6 +922,7 @@ def initial_state(args):
         native_worker = trusted_executable(args.native_worker, "--native-worker")
     return {
         "version": VERIFICATION_VERSION if versioned else 1,
+        "started_at": time(),
         "request": request,
         "worker": worker,
         "native_worker": native_worker,
@@ -915,11 +943,13 @@ def initial_state(args):
 
 def main():
     args = parse_args()
-    run = args.run.resolve()
     try:
-        if args.command == "status":
+        run = args.run.resolve()
+        if args.command in ("status", "support"):
             require((run / "state.json").is_file(), "run state not found")
-            print(json.dumps(Delivery(run, read_state(run), None).summary(), ensure_ascii=False, indent=2))
+            state = read_state(run)
+            summary = support_summary(run, state) if args.command == "support" else Delivery(run, state, None).summary()
+            print(json.dumps(summary, ensure_ascii=False, indent=2))
             return 0
         if args.command == "start":
             state = initial_state(args)
@@ -943,8 +973,9 @@ def main():
             return 0 if state["status"] == "complete" else 2
     except BlockingIOError:
         print("This run has a controller or worker in progress.", file=sys.stderr)
-    except (OSError, ValueError, KeyError) as exc:
-        print(f"BMAD delivery: {exc}", file=sys.stderr)
+    except (OSError, ValueError, KeyError, RuntimeError) as exc:
+        error = "unable to read the saved support snapshot" if args.command == "support" else str(exc)
+        print(f"BMAD delivery: {error}", file=sys.stderr)
     return 1
 
 

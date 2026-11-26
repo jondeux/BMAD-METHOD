@@ -35,6 +35,32 @@ Choose `--codex` or `--worker /path/to/trusted-executable` to supply a worker, i
 
 The controller dispatches verification after the native builds. Use `--verify-worker /path/to/trusted-checker` for typed executable checks. The trusted local checker receives the job and receipt paths, exercises the artifact snapshot with the required runtime, and consumes one dispatch.
 
+### Usage and support
+
+`status` reports dispatches, elapsed time, recorded retries, and observed model tokens by attempt. For each built-in `--codex` call, the controller reads the latest usable cumulative `turn.completed` counters from the final 1 MiB of the log. New calls save the provider's JSONL event stream in `provider.jsonl` and diagnostics in `worker.log`. Older calls use the combined `worker.log`. Each observed attempt labels its source. Input includes cached reads. The noncached count is input minus cached reads. Cache writes and reasoning are breakdowns of the reported input and output. [Codex usage event implementation](https://github.com/openai/codex/blob/main/codex-rs/exec/src/event_processor_with_jsonl_output.rs)
+
+`usage.coverage` is `observed` when every dispatch has a recognized final event, `partial` when any dispatch lacks one or falls back to an earlier observation, and `unavailable` when no usable counters were captured. Token totals cover the observed events. A missing optional counter is `null` for that attempt and its aggregate. Zero is a reported counter. Nested native usage is `unavailable` once a native workflow has dispatched. Independent checkers and custom workers have no built-in token reporting. Use provider billing for charges.
+
+`elapsed_basis: last-saved-activity` measures wall time through the latest recorded dispatch, resolution, or publication. Attempt elapsed time measures from dispatch to the recorded decision, including any wait before a late receipt was adopted. An unresolved attempt or a historical run without a start time reports `null` for its duration. Retries count new dispatches for an interruption, a re-verification, or the start of an artifact repair. A late receipt that avoids the replacement leaves the retry count unchanged. The summary includes the number of attempts missing retry metadata.
+
+Generate a local support summary with fixed status and worker labels, attempt numbers, and accounting figures.
+
+```bash
+python3 "$delivery" support _bmad-output/check-in-run > delivery-support.json
+```
+
+Keep the rest of the run directory private. It contains the job packets, receipts, raw logs, and artifacts.
+
+### What workers receive
+
+Every dispatched job contains the original request and checks, accumulated owner answers, the current route, any saved artifacts and verification feedback, and the remaining budget and timeout.
+
+| Worker | Access to the job |
+| --- | --- |
+| `--codex` | The adapter sends the job text to the configured provider. Small artifacts travel inline and the provider session can inspect larger artifacts under `snapshot/`. |
+| `--native-host` | The authorized workspace agent reads the job and serves the selected workflow using its configured tools and provider. |
+| `--worker`, `--native-worker`, `--verify-worker` | The executable receives local job and receipt paths and inherits the controller's environment. Its downstream tool and provider use depends on its configuration. |
+
 ## Request
 
 ```json

@@ -24,6 +24,7 @@ DELIVERY_FILES = (
     "scripts/codex_worker.py",
     "scripts/deliver.py",
     "scripts/native_host.py",
+    "scripts/run_metrics.py",
 )
 RUNTIME_FILES = ("config_utils.py", "memlog.py", "render_skill.py", "resolve_config.py", "resolve_customization.py")
 BUILD_FILES = (

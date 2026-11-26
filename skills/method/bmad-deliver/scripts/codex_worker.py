@@ -19,6 +19,7 @@ from deliver import (
     validate_receipt,
     write_json,
 )
+from run_metrics import PROVIDER_EVENTS_FILE
 
 INLINE_SNAPSHOT_BYTES = 16 * 1024
 
@@ -131,7 +132,8 @@ def main():
     if versioned_verify:
         instructions = VERSIONED_VERIFY
     prompt = f"{CONTRACT}\n\n{instructions}\n\n{json.dumps(job, ensure_ascii=False)}"
-    subprocess.run([*cmd, "-"], input=prompt, text=True, check=True, timeout=job["timeout_seconds"])
+    with Path(PROVIDER_EVENTS_FILE).open("xb") as events:
+        subprocess.run([*cmd, "-"], input=prompt, text=True, stdout=events, check=True, timeout=job["timeout_seconds"])
     raw = response.read_text(encoding="utf-8").strip()
     if raw.startswith("```json\n") and raw.endswith("\n```"):
         raw = raw.removeprefix("```json\n").removesuffix("\n```")
