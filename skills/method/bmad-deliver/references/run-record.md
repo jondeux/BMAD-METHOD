@@ -24,7 +24,7 @@ mkdir -p _bmad-output
 python3 "$delivery" start _bmad-output/check-in-run --request request.json --codex --native-host &
 ```
 
-Once the controller and workers stop, use `status` to read the saved result. To continue a native run when its gate permits, resume the same run from the workspace agent and serve its pending jobs.
+Use `status` while the controller is active or after it stops. It reads one saved snapshot and reports the pending attempt, its job path, the assigned native workflow when present, and the next action. A pending attempt can represent a stopped controller. To continue a native run when its gate permits, resume the same run from the workspace agent and serve its pending jobs.
 
 ```bash
 python3 "$delivery" status _bmad-output/check-in-run
@@ -103,19 +103,23 @@ An allowlisted deliverable can proceed automatically. Without a name allowlist, 
 
 | Status | Action |
 | --- | --- |
+| `dispatched` | Use the pending job path to serve a workspace-hosted workflow. If the controller stopped, resume the saved run. |
 | `approval-required` | Review the route and use `resume --approve PROPOSAL_ID` when the owner approves it. |
 | `answer-required` | Use `resume --answer 'OWNER ANSWER'` once the owner supplies the answer. |
-| `interrupted` | Inspect the saved attempt and use `resume --retry` to spend another worker call. |
+| `interrupted` | Use a bare resume to adopt a saved late receipt. Use `resume --retry` to request a new attempt. |
+| `checker-fault` | Repair the checker and use `resume --reverify` to check the saved build. Add `--budget NEW_TOTAL` if the current budget is exhausted. |
 | `budget-exhausted` | Use `resume --budget NEW_TOTAL` after the owner extends the cap. |
 | `complete` | Read the files under `artifacts/` and the verification results from `status`. |
 
-A bare resume reuses committed receipts and advances stages with available budget. If the run stopped at the cap after an independent checker returned a failed result and you repaired that checker, use `resume --reverify --budget NEW_TOTAL` to test the same build again. The earlier attempt remains in the run record. Every dispatch consumes one unit, including verification, failed attempts, and retries. A native run needs three dispatches for code or documents, or four for mixed delivery, when every stage succeeds on its first attempt. The runner enforces the call cap before dispatch and a per-call timeout. Billed tokens are provider usage. The call cap is independent of token count. Verification failure or inapplicability leaves the check open. The controller allocates a repair attempt if budget remains. It publishes only when every check passes and, in version 2, the files match the verified hashes.
+A bare resume reuses committed receipts and advances stages with available budget. If a valid late receipt has already committed, even `resume --retry` adopts that receipt first. If retry wins and has budget, it closes the old attempt to further submission. At the cap the pending attempt can still accept its receipt. Extending the budget rechecks that attempt before starting a replacement. Each new dispatch uses one unit, including verification, failed attempts, and retries. A native run needs three dispatches for code or documents, or four for mixed delivery, when every stage succeeds on its first attempt. The runner enforces the call cap before dispatch and a per-call timeout. Billed tokens are provider usage. The call cap is independent of token count.
+
+A declared checker fault pauses in verification until the checker is repaired. Re-verification uses the same saved build. For older independent checker receipts that reported a failure as an artifact verdict, `resume --reverify --budget NEW_TOTAL` remains available after the run stops at its cap. Verification failure or inapplicability leaves the check open and the controller allocates a repair attempt if budget remains. It publishes only when every check passes and, in version 2, the files match the verified hashes.
 
 ## Persisted record and worker interface
 
-The run contains a versioned `state.json`, `attempts/<number>/job.json`, the worker log and any committed `receipt.json`. State stores the original request, current budget and its extensions, phase, dispatches, owner answers and approvals, B replacements, verification results and published file hashes. An owner-approved Mode B replacement records its proposal ID in `approval`. The run lock also covers a subprocess that outlives the controller. A complete receipt is replayable. A missing or malformed receipt stops for an explicit retry.
+The run contains a versioned `state.json`, `attempts/<number>/job.json`, the worker log and any committed `receipt.json`. State stores the original request, current budget and its extensions, phase, dispatches, owner answers and approvals, B replacements, verification results and published file hashes. An owner-approved Mode B replacement records its proposal ID in `approval`. The run lock covers controller writes and a subprocess that outlives the controller. Status reads the atomically replaced state without taking that lock. `attempt_version: 1` identifies the receipt and retry protocol. Existing records gain the marker on the next controller save. An attempt retired by retry while still missing its receipt is marked `superseded`.
 
-A trusted worker receives two arguments, the absolute job path and absolute receipt path, and runs in the attempt directory. It reads the job and writes a single JSON receipt using a temporary file, fsync and atomic rename. Treat the executable and its provider as part of the trusted environment. Limit effects to this delivery.
+A trusted worker receives two arguments, the absolute job path and absolute receipt path, and runs in the attempt directory. It reads the job and writes a single JSON receipt using a temporary file, fsync and atomic rename. Integrations that submit receipts outside the worker process use `commit_receipt(job_path, result)` from `deliver.py` to coordinate with retry. Treat the executable and its provider as part of the trusted environment. Limit effects to this delivery.
 
 The job has these fields at every phase:
 
@@ -136,6 +140,7 @@ Return one of the following receipts:
 - For `route`, return `status: ok`, a `deliverable`, `workflows` array, `rationale`, and `assumptions` array. In Mode B, the route can also declare its output class in `kind`. An assumption must be reversible. Cite why a workflow is needed.
 - For `build`, return `status: ok` and `artifacts`, each with relative `path` and full `content`. On repair the job contains the prior snapshot and verification. To propose replacement use `status: replace` and the route fields with new evidence in the rationale. In Mode B, a replacement can also declare its output class in `kind`.
 - For `verify`, return `status: ok` and `checks`, with `id`, `status` (pass, fail or inapplicable) and explanatory `evidence` for every original ID. For typed checks also include `verification_version: 2`, the job's `verification_id`, and the exact `artifact_sha256` map at the receipt root. Include the check's declared `kind` in every row. Verify the hashes of the actual snapshot before testing or inspecting it.
+- For a fault in an independent checker, return `status: checker-fault` and an `error` describing the checker failure. Omit `checks`. For typed checks include the same version, job ID, and artifact hash map as a verification receipt.
 - For a question requiring the owner, return `status: blocked` and `question` during any phase. The answer is persisted before a new call.
 
 For a typed executable pass the local checker must record an `observation` object in the check row. It contains the observed argument vector in `argv`, the integer `exit_code`, and captured strings `stdout` and `stderr`. Use empty strings for quiet streams. Keep relevant excerpts when full output would exceed the 4 MiB receipt limit. The checker should exit successfully on the expected behavior, including when it tests an expected failure. The controller treats the owner-configured checker as the source of execution observations.

@@ -17,10 +17,12 @@ import signal
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
 MAX_JSON_BYTES = 4 * 1024 * 1024
+ATTEMPT_VERSION = 1
 VERIFICATION_VERSION = 2
 CHECK_KINDS = ("executable", "source-inspection", "judgment")
 REFERENCE_SOURCES = ("artifact", "intake")
@@ -82,6 +84,43 @@ def write_json(path, value, *, replace=True):
         sync_directory(path.parent)
     finally:
         Path(temporary).unlink(missing_ok=True)
+
+
+def read_state(run):
+    state = read_json(run / "state.json", limit=32 * 1024 * 1024)
+    require(
+        isinstance(state, dict) and state.get("version") in (1, VERIFICATION_VERSION), "unsupported run state version"
+    )
+    require(state.get("attempt_version", 0) in (0, ATTEMPT_VERSION), "unsupported attempt version")
+    return state
+
+
+def pending_attempt(state):
+    if state["status"] == "dispatched":
+        return state["attempts"][-1]
+    if state["status"] in ("interrupted", "budget-exhausted"):
+        attempt = state["attempts"][-1]
+        if attempt["status"] == "no-receipt":
+            return attempt
+    return None
+
+
+@contextmanager
+def attempt_decision(directory):
+    with (directory / ".receipt.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def commit_receipt(job_path, result):
+    """Commit an asynchronous receipt while its attempt still accepts results."""
+    job_path = job_path.resolve(strict=True)
+    directory = job_path.parent
+    require(job_path.name == "job.json" and directory.parent.name == "attempts", "invalid job path")
+    with attempt_decision(directory):
+        attempt = pending_attempt(read_state(directory.parent.parent))
+        require(attempt is not None and directory.name == str(attempt["number"]), "attempt is closed for receipts")
+        write_json(job_path.with_name("receipt.json"), result, replace=False)
 
 
 def validate_boundaries(authority, kind):
@@ -191,6 +230,9 @@ def validate_receipt(result, phase, checks):
         validate_route(result)
     elif status == "failed" and phase == "build":
         require(text(result.get("error")), "failed native worker must provide its blocking condition")
+    elif status == "checker-fault" and phase == "verify":
+        require(text(result.get("error")), "checker fault must describe the failure")
+        require("checks" not in result, "checker fault must omit check verdicts")
     elif status == "ok":
         if phase == "route":
             validate_route(result)
@@ -262,7 +304,7 @@ def validate_references(references, sources, required):
     require(set(required) <= observed_sources, "source-inspection pass is missing a required evidence source")
 
 
-def validate_verification(result, request, artifacts, attempt):
+def validate_verification_snapshot(result, artifacts, attempt):
     version = result.get("verification_version")
     require(type(version) is int and version == VERIFICATION_VERSION, "invalid verification receipt version")
     require(
@@ -272,6 +314,10 @@ def validate_verification(result, request, artifacts, attempt):
     require(result.get("artifact_sha256") == expected_hashes, "verification receipt has a different artifact digest")
     validate_artifacts(artifacts)
     require(artifact_hashes(artifacts) == expected_hashes, "build artifacts changed after verification dispatch")
+
+
+def validate_verification(result, request, artifacts, attempt):
+    validate_verification_snapshot(result, artifacts, attempt)
     sources = {item["path"]: item["content"].splitlines() for item in artifacts}
     sources[None] = request["intake"]["text"].splitlines()
     for row in result["checks"]:
@@ -366,6 +412,7 @@ class Delivery:
         return self.state["version"] == VERIFICATION_VERSION
 
     def save(self):
+        self.state["attempt_version"] = ATTEMPT_VERSION
         write_json(self.run / "state.json", self.state)
 
     def receipt(self, attempt):
@@ -539,6 +586,11 @@ class Delivery:
         mode = self.request["authority"]["mode"]
         if status == "blocked":
             self.state.update(status="answer-required", question=result["question"])
+        elif status == "checker-fault":
+            require("verifier" in attempt, "checker fault is reserved for an independent verifier")
+            if self.versioned_checks:
+                validate_verification_snapshot(result, self.artifacts(), attempt)
+            self.state.update(status="checker-fault", error=result["error"])
         elif status == "failed":
             require("workflow" in attempt, "failed receipt is reserved for native workers")
             self.state.update(status="interrupted", error=result["error"])
@@ -580,22 +632,49 @@ class Delivery:
                 if self.state.get("native_worker"):
                     self.state["native_partial"] = []
 
-    def recover(self):
-        attempt = self.state["attempts"][-1]
+    def recover_attempt(self, attempt):
+        """Adopt a receipt or record its absence while holding the attempt lock."""
         receipt = self.receipt(attempt["number"])
         if not receipt.exists():
-            attempt["status"] = "no-receipt"
-            self.state.update(status="interrupted", error=f"No durable receipt for attempt {attempt['number']}")
-        else:
-            try:
-                result = read_json(receipt)
-                validate_receipt(result, attempt["phase"], self.request["checks"])
-                self.apply(result, attempt)
-                attempt["status"] = result["status"]
-            except (OSError, ValueError, KeyError) as exc:
-                attempt["status"] = "invalid-receipt"
-                self.state.update(status="interrupted", error=f"Invalid worker receipt: {exc}")
+            if attempt["status"] == "dispatched":
+                attempt["status"] = "no-receipt"
+                self.state.update(status="interrupted", error=f"No durable receipt for attempt {attempt['number']}")
+                self.save()
+            return False
+        try:
+            sync_directory(receipt.parent)
+            result = read_json(receipt)
+            validate_receipt(result, attempt["phase"], self.request["checks"])
+            self.state.pop("error", None)
+            self.apply(result, attempt)
+            attempt["status"] = result["status"]
+        except (OSError, ValueError, KeyError) as exc:
+            attempt["status"] = "invalid-receipt"
+            self.state.update(status="interrupted", error=f"Invalid worker receipt: {exc}")
         self.save()
+        return attempt["status"] != "invalid-receipt"
+
+    def recover(self):
+        attempt = pending_attempt(self.state)
+        if attempt is not None:
+            with attempt_decision(self.receipt(attempt["number"]).parent):
+                return self.recover_attempt(attempt)
+        return False
+
+    def retry(self):
+        attempt = self.state["attempts"][-1]
+        with attempt_decision(self.receipt(attempt["number"]).parent):
+            if attempt["status"] == "no-receipt" and self.recover_attempt(attempt):
+                return
+            if attempt["status"] == "no-receipt":
+                if len(self.state["attempts"]) >= self.state["budget"]:
+                    self.state["status"] = "budget-exhausted"
+                    self.save()
+                    return
+                attempt["status"] = "superseded"
+            self.state.pop("error", None)
+            self.state["status"] = "ready"
+            self.save()
 
     def advance(self):
         if self.state["status"] == "dispatched":
@@ -614,11 +693,22 @@ class Delivery:
             self.dispatch()
             self.recover()
 
+    def reverify_after_budget_exhaustion(self):
+        attempts = self.state["attempts"]
+        last_attempt = attempts[-1] if attempts else {}
+        return (
+            self.state["status"] == "budget-exhausted"
+            and self.state["phase"] == "build"
+            and last_attempt.get("phase") == "verify"
+            and bool(last_attempt.get("verifier"))
+        )
+
     def resume(self, args):
+        waiting_for_retry_budget = (
+            self.state["status"] == "budget-exhausted" and pending_attempt(self.state) is not None
+        )
+        recovered = self.recover()
         status = self.state["status"]
-        if self.state["status"] == "dispatched":
-            self.recover()
-            status = self.state["status"]
         if args.approve is not None:
             require(status == "approval-required", "no proposal is waiting for approval")
             proposal = self.state["proposals"][-1]
@@ -626,17 +716,19 @@ class Delivery:
         if args.answer is not None:
             require(status == "answer-required" and text(args.answer), "no owner question or empty answer")
         if args.retry:
-            require(status == "interrupted", "no interrupted attempt to retry")
+            require(recovered or status == "interrupted" or waiting_for_retry_budget, "no interrupted attempt to retry")
         if args.reverify:
-            last_attempt = next(iter(self.state["attempts"][-1:]), {})
-            require(
-                status == "budget-exhausted"
-                and self.state["phase"] == "build"
-                and last_attempt.get("phase") == "verify"
-                and last_attempt.get("verifier"),
-                "no failed independent verification awaiting repair",
-            )
-            require(args.budget is not None, "--reverify requires a new total budget")
+            if status == "checker-fault":
+                require(
+                    args.budget is not None or len(self.state["attempts"]) < self.state["budget"],
+                    "--reverify needs available budget or a new total budget",
+                )
+            else:
+                require(
+                    self.reverify_after_budget_exhaustion(),
+                    "no failed independent verification awaiting repair",
+                )
+                require(args.budget is not None, "--reverify requires a new total budget")
         if args.budget is not None:
             require(
                 args.budget > self.state["budget"] and status != "complete",
@@ -646,7 +738,7 @@ class Delivery:
                 {"after_dispatch": len(self.state["attempts"]), "total": args.budget}
             )
             self.state["budget"] = args.budget
-            if status == "budget-exhausted":
+            if status == "budget-exhausted" and not waiting_for_retry_budget:
                 self.state["status"] = "ready"
         if args.approve is not None:
             self.state["approvals"].append(proposal["id"])
@@ -658,16 +750,17 @@ class Delivery:
         if args.answer is not None:
             self.state["answers"].append({"question": self.state.pop("question"), "answer": args.answer})
             self.state["status"] = "ready"
-        if args.retry:
-            self.state.pop("error", None)
-            self.state["status"] = "ready"
+        if not recovered and (args.retry or (waiting_for_retry_budget and args.budget is not None)):
+            self.retry()
         if args.reverify:
-            self.state["phase"] = "verify"
+            self.state.pop("error", None)
+            self.state.update(phase="verify", status="ready")
         self.save()
         self.advance()
 
     def summary(self):
         state = self.state
+        status = state["status"]
         keys = (
             "status",
             "phase",
@@ -679,6 +772,9 @@ class Delivery:
             "error",
         )
         summary = {key: state[key] for key in keys if key in state}
+        if status == "checker-fault":
+            summary.pop("verification", None)
+            summary.pop("verification_artifact_sha256", None)
         summary.update(
             run=str(self.run),
             dispatched=len(state["attempts"]),
@@ -691,11 +787,53 @@ class Delivery:
             summary["native_runs"] = [
                 {"attempt": item["number"], **item["native"]} for item in state["attempts"] if "native" in item
             ]
-        if state["status"] == "interrupted":
+        if status in ("interrupted", "checker-fault"):
             summary["worker_log"] = str(self.receipt(len(state["attempts"])).with_name("worker.log"))
-        if state["status"] == "approval-required":
+        if status == "approval-required":
             summary["proposal"] = state["proposals"][-1]
+        pending = pending_attempt(state)
+        if pending is not None:
+            summary["pending_attempt"] = {
+                key: pending[key] for key in ("number", "phase", "status", "workflow") if key in pending
+            }
+            summary["pending_attempt"]["job"] = str(self.receipt(pending["number"]).with_name("job.json"))
+        summary["next_action"] = self.next_action(status, pending)
         return summary
+
+    def next_action(self, status, pending):
+        native_worker = self.state.get("native_worker") or []
+        workspace_hosted = native_worker[-1:] == ["wait"]
+        if status == "dispatched":
+            if "workflow" in pending and workspace_hosted:
+                return "Serve the pending workflow from its job path. Run resume if the controller stopped."
+            return "Wait for the worker. Run resume if the controller stopped."
+        if pending is not None:
+            if status == "budget-exhausted":
+                retry = "Use resume --budget NEW_TOTAL to fund a replacement."
+            elif len(self.state["attempts"]) >= self.state["budget"]:
+                retry = "Use resume --retry --budget NEW_TOTAL to fund a replacement."
+            else:
+                retry = "Use resume --retry to start a new attempt."
+            if "workflow" in pending and workspace_hosted:
+                return f"Submit any finished native result and run resume. {retry}"
+            return f"Run resume to adopt a saved receipt. {retry}"
+        if status == "checker-fault":
+            if len(self.state["attempts"]) >= self.state["budget"]:
+                return "Repair the checker and run resume --reverify --budget NEW_TOTAL."
+            return "Repair the checker and run resume --reverify."
+        if status == "budget-exhausted" and self.reverify_after_budget_exhaustion():
+            return (
+                "Use resume --budget NEW_TOTAL to rebuild. "
+                "If the checker was repaired, use resume --reverify --budget NEW_TOTAL to check the saved build."
+            )
+        return {
+            "ready": "Run resume if the controller stopped.",
+            "interrupted": "Inspect the error and worker log, then run resume --retry when ready.",
+            "approval-required": "Review the proposal and use resume --approve after owner approval.",
+            "answer-required": "Use resume --answer once the owner responds.",
+            "budget-exhausted": "Use resume --budget NEW_TOTAL after the owner extends the cap.",
+            "complete": "Read the published artifacts and verification results.",
+        }[status]
 
 
 def parse_args():
@@ -779,6 +917,10 @@ def main():
     args = parse_args()
     run = args.run.resolve()
     try:
+        if args.command == "status":
+            require((run / "state.json").is_file(), "run state not found")
+            print(json.dumps(Delivery(run, read_state(run), None).summary(), ensure_ascii=False, indent=2))
+            return 0
         if args.command == "start":
             state = initial_state(args)
             run.mkdir(mode=0o700)
@@ -790,8 +932,7 @@ def main():
         with (run / ".lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             if args.command != "start":
-                state = read_json(run / "state.json", limit=32 * 1024 * 1024)
-                require(state.get("version") in (1, VERIFICATION_VERSION), "unsupported run state version")
+                state = read_state(run)
             delivery = Delivery(run, state, lock.fileno())
             if args.command == "start":
                 delivery.save()
@@ -799,7 +940,7 @@ def main():
             elif args.command == "resume":
                 delivery.resume(args)
             print(json.dumps(delivery.summary(), ensure_ascii=False, indent=2))
-            return 0 if args.command == "status" or state["status"] == "complete" else 2
+            return 0 if state["status"] == "complete" else 2
     except BlockingIOError:
         print("This run has a controller or worker in progress.", file=sys.stderr)
     except (OSError, ValueError, KeyError) as exc:

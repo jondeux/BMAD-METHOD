@@ -1,3 +1,4 @@
+import fcntl
 import hashlib
 import json
 import os
@@ -76,6 +77,11 @@ def typed_result():
     artifacts = {item["path"]: item["content"] for item in job["artifacts"]}
     hashes = {path: digest(content.encode()) for path, content in artifacts.items()}
     assert job["artifact_sha256"] == hashes
+    if scenario == "evidence-checker-fault" and not (job_file.parents[3] / "checker-repaired").is_file():
+        return {
+            "status": "checker-fault", "error": "The checker configuration is missing.",
+            "verification_version": 2, "verification_id": job["verification_id"], "artifact_sha256": hashes,
+        }
     rows = []
     for check_id, check in request["checks"].items():
         kind = check["kind"]
@@ -196,6 +202,13 @@ elif phase == "verify":
     if scenario == "checker-repair" and not (job_file.parents[3] / "checker-repaired").is_file():
         verdict, observed = "fail", "The checker needs a configuration repair."
     result = {"status": "ok", "checks": [{"id": check_id, "status": verdict, "evidence": observed}]}
+    if scenario == "declared-checker-fault" and not (job_file.parents[3] / "checker-repaired").is_file():
+        result = {"status": "checker-fault", "error": "The checker configuration is missing."}
+    if scenario == "repair-then-checker-fault":
+        if job["attempt"] == 3:
+            result["checks"][0].update(status="fail", evidence="The first build needs a repair.")
+        elif job["attempt"] == 5:
+            result = {"status": "checker-fault", "error": "The repaired build could not be checked."}
 else:
     raise AssertionError(phase)
 
@@ -225,7 +238,9 @@ def workspace(tmp_path, monkeypatch):
     return tmp_path
 
 
-def prepare(workspace, *, kind="non-code", mode="C", scenario="baseline", budget=3, authority=None, checks=None):
+def prepare(
+    workspace, *, kind="non-code", mode="C", scenario="baseline", budget=3, authority=None, checks=None, timeout=15
+):
     request = workspace / "request.json"
     if checks is None:
         checks = (
@@ -247,7 +262,7 @@ def prepare(workspace, *, kind="non-code", mode="C", scenario="baseline", budget
                 },
                 "checks": checks,
                 "budget": budget,
-                "timeout_seconds": 15,
+                "timeout_seconds": timeout,
             }
         )
     )
@@ -286,6 +301,11 @@ def test_code_recovers_receipt_without_redispatch_and_enforces_budget(workspace,
     with launch(*args) as controller:
         try:
             wait_for(attempt / "worker-held")
+            active = command("status", str(run))
+            assert active["status"] == "dispatched"
+            assert active["pending_attempt"]["job"] == str(attempt / "job.json")
+            assert "Wait for the worker" in active["next_action"]
+            assert "in progress" in command("resume", str(run), expect=1)
             controller.kill()
             controller.wait(timeout=5)
             assert "in progress" in command("resume", str(run), expect=1)
@@ -514,6 +534,21 @@ def test_mode_b_resumes_legacy_selected_route_without_reapproval(workspace):
     assert state(run)["proposals"] == []
 
 
+def test_status_reads_legacy_snapshot_without_changing_the_run(workspace):
+    run = workspace / "run"
+    command(*prepare(workspace))
+    record = state(run)
+    del record["attempt_version"]
+    snapshot = run / "state.json"
+    snapshot.write_text(json.dumps(record))
+    saved = snapshot.read_bytes()
+    (run / ".lock").unlink()
+    summary = command("status", str(run))
+    assert (summary["status"], summary["verification_evidence"]) == ("complete", "legacy-prose")
+    assert snapshot.read_bytes() == saved
+    assert not (run / ".lock").exists()
+
+
 def start_typed(workspace, scenario="evidence", *, budget=3, checks=TYPED_CHECKS):
     return prepare(workspace, kind="mixed", scenario=f"{scenario}\n{BRIEF_LIMITATION}", budget=budget, checks=checks)
 
@@ -740,6 +775,7 @@ def test_reverify_reuses_build_after_checker_repair(workspace):
     failed = command(*args, "--verify-worker", str(workspace / "fixture-worker"), expect=2)
     assert failed["status"] == "budget-exhausted"
     assert failed["verification"][0]["status"] == "fail"
+    assert "resume --reverify --budget NEW_TOTAL" in failed["next_action"]
     (workspace / "checker-repaired").touch()
     result = command("resume", str(run), "--reverify", "--budget", "4")
     assert result["status"] == "complete"
@@ -750,14 +786,268 @@ def test_reverify_reuses_build_after_checker_repair(workspace):
     assert json.loads((run / "attempts" / "3" / "receipt.json").read_text())["checks"][0]["status"] == "fail"
 
 
-def native_host(action, job, *args, expected=0):
-    result = subprocess.run(
+@pytest.mark.parametrize(("typed", "budget"), [(False, 4), (True, 4), (True, 3)])
+def test_checker_fault_pauses_and_reverifies_the_same_build(workspace, typed, budget):
+    run = workspace / "run"
+    args = (
+        start_typed(workspace, "evidence-checker-fault", budget=budget)
+        if typed
+        else prepare(workspace, scenario="declared-checker-fault", budget=budget)
+    )
+    fault = command(*args, "--verify-worker", str(workspace / "fixture-worker"), expect=2)
+    assert (fault["status"], fault["phase"], fault["dispatched"]) == ("checker-fault", "verify", 3)
+    assert "configuration is missing" in fault["error"]
+    assert "resume --reverify" in fault["next_action"]
+    assert command("status", str(run)) == fault
+    assert command("resume", str(run), expect=2) == fault
+    assert "no interrupted attempt" in command("resume", str(run), "--retry", expect=1)
+    assert not (run / "attempts" / "4").exists()
+
+    (workspace / "checker-repaired").touch()
+    retry = ["resume", str(run), "--reverify"]
+    if budget == 3:
+        assert "needs available budget" in command(*retry, expect=1)
+        retry += ["--budget", "4"]
+    result = command(*retry)
+    assert (result["status"], result["dispatched"]) == ("complete", 4)
+    assert "error" not in result
+    attempts = state(run)["attempts"]
+    assert [(attempt["phase"], attempt["status"]) for attempt in attempts] == [
+        ("route", "ok"),
+        ("build", "ok"),
+        ("verify", "checker-fault"),
+        ("verify", "ok"),
+    ]
+    if typed:
+        assert attempts[2]["verification_id"] != attempts[3]["verification_id"]
+        assert attempts[2]["artifact_sha256"] == result["artifact_sha256"]
+
+
+def test_default_worker_cannot_declare_a_checker_fault(workspace):
+    result = command(*prepare(workspace, scenario="declared-checker-fault", budget=4), expect=2)
+    assert (result["status"], result["phase"], result["dispatched"]) == ("interrupted", "verify", 3)
+    assert "reserved for an independent verifier" in result["error"]
+
+
+def test_checker_fault_reports_current_failure_after_a_rebuild(workspace):
+    run = workspace / "run"
+    args = prepare(workspace, scenario="repair-then-checker-fault", budget=6)
+    fault = command(*args, "--verify-worker", str(workspace / "fixture-worker"), expect=2)
+    assert (fault["status"], fault["dispatched"]) == ("checker-fault", 5)
+    assert "verification" not in fault
+    assert state(run)["verification"][0]["evidence"] == "The first build needs a repair."
+    result = command("resume", str(run), "--reverify")
+    assert result["status"] == "complete"
+    assert [attempt["phase"] for attempt in state(run)["attempts"]] == [
+        "route",
+        "build",
+        "verify",
+        "build",
+        "verify",
+        "verify",
+    ]
+
+
+def launch_native(action, job, *args):
+    return subprocess.Popen(
         [sys.executable, "-B", str(NATIVE_HOST), action, str(job), *args],
         text=True,
-        capture_output=True,
-        timeout=10,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
-    assert result.returncode == expected, result.stderr
+
+
+def native_host(action, job, *args, expected=0):
+    with launch_native(action, job, *args) as process:
+        _, stderr = process.communicate(timeout=10)
+        assert process.returncode == expected, stderr
+        return stderr
+
+
+def stage_booking_job(job):
+    native_host("prepare", job, "--bmad-root", str(REPO))
+    workspace = job.parent / "workspace"
+    (workspace / "plan.md").write_text("---\nstatus: built\n---\n## Auto Run Result\n")
+    (workspace / "booking.py").write_text(
+        "def conflict(first, second):\n    return first[0] < second[1] and second[0] < first[1]\n"
+    )
+    return ("submit", job, "--terminal", "plan.md", "--artifact", "booking.py=booking.py")
+
+
+def test_status_guides_controller_managed_native_workers(workspace, monkeypatch):
+    run = workspace / "run"
+    args = prepare(workspace, kind="code")
+    monkeypatch.setenv("BMAD_TEST_HOLD", "build:before")
+    attempt = run / "attempts" / "2"
+    with launch(*args, "--native-worker", str(workspace / "fixture-worker")) as controller:
+        try:
+            wait_for(attempt / "worker-held")
+            active = command("status", str(run))
+            assert active["pending_attempt"]["workflow"] == "bmad-build-auto"
+            assert active["next_action"].startswith("Wait for the worker.")
+        finally:
+            (attempt / "release").touch()
+        stdout, stderr = controller.communicate(timeout=10)
+        assert controller.returncode == 2, (stdout, stderr)
+    paused = json.loads(stdout)
+    assert paused["pending_attempt"]["workflow"] == "bmad-build-auto"
+    assert paused["next_action"].startswith("Run resume to adopt a saved receipt.")
+
+
+@pytest.mark.parametrize(("timed_out", "resume_flags"), [(False, []), (True, []), (True, ["--retry"])])
+def test_native_receipt_before_and_after_timeout_is_adopted_once(workspace, timed_out, resume_flags):
+    run = workspace / "run"
+    job = run / "attempts" / "2" / "job.json"
+    args = prepare(workspace, kind="code", timeout=2 if timed_out else 15)
+    with launch(*args, "--native-host") as controller:
+        wait_for(job)
+        if timed_out:
+            stdout, stderr = controller.communicate(timeout=10)
+            assert controller.returncode == 2, (stdout, stderr)
+            paused = json.loads(stdout)
+            assert (paused["status"], paused["pending_attempt"]["status"]) == ("interrupted", "no-receipt")
+            assert paused["pending_attempt"]["workflow"] == "bmad-build-auto"
+            assert command("status", str(run)) == paused
+            if not resume_flags:
+                legacy = state(run)
+                del legacy["attempt_version"]
+                (run / "state.json").write_text(json.dumps(legacy))
+        submission = stage_booking_job(job)
+        if not timed_out:
+            assert controller.poll() is None
+            active = command("status", str(run))
+            assert (active["status"], active["pending_attempt"]["workflow"]) == ("dispatched", "bmad-build-auto")
+            assert active["pending_attempt"]["job"] == str(job)
+            assert "Serve the pending workflow" in active["next_action"]
+        native_host(*submission)
+        if not timed_out:
+            stdout, stderr = controller.communicate(timeout=10)
+            assert controller.returncode == 0, (stdout, stderr)
+            result = json.loads(stdout)
+    if timed_out:
+        result = command("resume", str(run), *resume_flags)
+    assert (result["status"], result["dispatched"]) == ("complete", 3)
+    assert "error" not in result
+    assert state(run)["attempt_version"] == 1
+    assert [attempt["phase"] for attempt in state(run)["attempts"]] == ["route", "build", "verify"]
+    assert [item["attempt"] for item in result["native_runs"]] == [2]
+    assert "closed for receipts" in native_host(*submission, expected=1)
+
+
+@pytest.mark.parametrize("concurrent", [False, True])
+def test_native_retry_and_late_submissions_accept_only_one_build(workspace, concurrent):
+    run = workspace / "run"
+    old_job = run / "attempts" / "2" / "job.json"
+    start = command(*prepare(workspace, kind="code", budget=4, timeout=2), "--native-host", expect=2)
+    assert (start["status"], start["pending_attempt"]["number"]) == ("interrupted", 2)
+    submission = stage_booking_job(old_job)
+
+    if concurrent:
+        lock = (old_job.parent / ".receipt.lock").open("a")
+        with lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            retry = launch("resume", str(run), "--retry")
+            host = launch_native(*submission)
+            assert command("status", str(run)) == start
+        with retry, host:
+            retry_stdout, retry_stderr = retry.communicate(timeout=10)
+            _, host_stderr = host.communicate(timeout=10)
+            if host.returncode == 0:
+                assert retry.returncode == 0, (retry_stdout, retry_stderr)
+                result = json.loads(retry_stdout)
+            else:
+                assert host.returncode == 1 and "closed for receipts" in host_stderr
+                assert retry.returncode == 2, (retry_stdout, retry_stderr)
+                result = json.loads(retry_stdout)
+    else:
+        result = command("resume", str(run), "--retry", expect=2)
+        assert "closed for receipts" in native_host(*submission, expected=1)
+        assert "closed for preparation" in native_host("prepare", old_job, "--bmad-root", str(REPO), expected=1)
+
+    if result["status"] == "complete":
+        assert (result["dispatched"], [item["attempt"] for item in result["native_runs"]]) == (3, [2])
+    else:
+        assert (result["status"], result["pending_attempt"]["number"]) == ("interrupted", 3)
+        assert state(run)["attempts"][1]["status"] == "superseded"
+        assert not old_job.with_name("receipt.json").exists()
+        new_job = run / "attempts" / "3" / "job.json"
+        native_host(*stage_booking_job(new_job))
+        result = command("resume", str(run))
+        assert (result["status"], result["dispatched"]) == ("complete", 4)
+        assert [item["attempt"] for item in result["native_runs"]] == [3]
+    accepted = [
+        attempt for attempt in state(run)["attempts"] if attempt["phase"] == "build" and attempt["status"] == "ok"
+    ]
+    assert len(accepted) == 1
+
+
+def test_retry_without_budget_leaves_the_late_receipt_eligible(workspace):
+    run = workspace / "run"
+    job = run / "attempts" / "2" / "job.json"
+    command(*prepare(workspace, kind="code", budget=2, timeout=2), "--native-host", expect=2)
+    capped = command("resume", str(run), "--retry", expect=2)
+    assert (capped["status"], capped["pending_attempt"]["status"]) == ("budget-exhausted", "no-receipt")
+    assert "resume --budget NEW_TOTAL" in capped["next_action"]
+    assert not (run / "attempts" / "3").exists()
+
+    native_host(*stage_booking_job(job))
+    result = command("resume", str(run), "--budget", "3")
+    assert (result["status"], result["dispatched"]) == ("complete", 3)
+    assert [attempt["phase"] for attempt in state(run)["attempts"]] == ["route", "build", "verify"]
+
+
+def test_retry_rechecks_a_receipt_committed_after_its_initial_lookup(workspace):
+    run = workspace / "run"
+    job = run / "attempts" / "2" / "job.json"
+    command(*prepare(workspace, kind="code", budget=4, timeout=2), "--native-host", expect=2)
+    submission = stage_booking_job(job)
+    barrier = """
+import sys
+import time
+from deliver import Delivery, main
+
+retry = Delivery.retry
+
+def pause_after_initial_recovery(self):
+    ready = self.run.parent / "retry-ready"
+    ready.touch()
+    deadline = time.monotonic() + 10
+    while not ready.with_name("retry-release").exists():
+        assert time.monotonic() < deadline
+        time.sleep(0.02)
+    return retry(self)
+
+Delivery.retry = pause_after_initial_recovery
+sys.exit(main())
+"""
+    with subprocess.Popen(
+        [sys.executable, "-B", "-c", barrier, "resume", str(run), "--retry"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ) as controller:
+        try:
+            wait_for(workspace / "retry-ready")
+            native_host(*submission)
+        finally:
+            (workspace / "retry-release").touch()
+        stdout, stderr = controller.communicate(timeout=10)
+        assert controller.returncode == 0, (stdout, stderr)
+    result = json.loads(stdout)
+    assert (result["dispatched"], [item["attempt"] for item in result["native_runs"]]) == (3, [2])
+
+
+def test_explicit_retry_can_replace_an_invalid_late_receipt(workspace):
+    run = workspace / "run"
+    old_job = run / "attempts" / "2" / "job.json"
+    command(*prepare(workspace, kind="code", budget=4, timeout=2), "--native-host", expect=2)
+    old_job.with_name("receipt.json").write_text("{truncated")
+    retried = command("resume", str(run), "--retry", expect=2)
+    assert (retried["status"], retried["pending_attempt"]["number"]) == ("interrupted", 3)
+    assert state(run)["attempts"][1]["status"] == "invalid-receipt"
+    native_host(*stage_booking_job(run / "attempts" / "3" / "job.json"))
+    result = command("resume", str(run))
+    assert (result["status"], [item["attempt"] for item in result["native_runs"]]) == ("complete", [3])
 
 
 @pytest.mark.parametrize("typed", [False, True])
