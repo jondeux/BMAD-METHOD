@@ -1,0 +1,83 @@
+{
+  "freeze_date": "2026-11-26",
+  "release": "0.2.0",
+  "cases": [
+    {
+      "id": "H-CODE",
+      "artifacts": ["preview_window.py"],
+      "direct_workflows": ["bmad-build-auto"],
+      "request": {
+        "kind": "code",
+        "intake": {
+          "kind": "idea",
+          "text": "A local audio editor needs a pure Python function preview_window(total_ms, start_ms, requested_ms). Inputs are nonnegative integers. Return a pair (start, end) in milliseconds. Clamp start at total_ms and end at total_ms. Use only the Python standard library."
+        },
+        "authority": {
+          "mode": "C",
+          "outcome": "Calculate the playback interval without reading or modifying media files",
+          "deliverable": "preview_window.py"
+        },
+        "checks": {
+          "interior": {"kind": "executable", "behavior": "preview_window(1000, 250, 300) returns the tuple (250, 550)."},
+          "truncate_end": {"kind": "executable", "behavior": "preview_window(1000, 950, 200) returns the tuple (950, 1000)."},
+          "start_past_end": {"kind": "executable", "behavior": "preview_window(1000, 1300, 50) returns the tuple (1000, 1000)."},
+          "empty_preview": {"kind": "executable", "behavior": "preview_window(1000, 250, 0) returns the tuple (250, 250)."}
+        },
+        "budget": 3,
+        "timeout_seconds": 600
+      }
+    },
+    {
+      "id": "H-DOC",
+      "artifacts": ["gallery-label-pilot.md"],
+      "direct_workflows": ["bmad-product-brief"],
+      "request": {
+        "kind": "non-code",
+        "intake": {
+          "kind": "literature",
+          "text": "Synthetic gallery note: Staff timed six corrections to English labels. The study did not test translated labels. A two-week trial of a shared correction queue is proposed. The collections lead decides whether to authorize it. During the proposed trial, every submitted label correction should be reviewed within two business days. No trial has been approved."
+        },
+        "authority": {
+          "mode": "C",
+          "outcome": "Give the collections lead a decision-ready brief for the shared correction queue trial",
+          "deliverable": "gallery-label-pilot.md"
+        },
+        "checks": {
+          "proposal": {"kind": "source-inspection", "behavior": "Describe a two-week shared correction queue trial as a proposal awaiting authorization."},
+          "decision_owner": {"kind": "source-inspection", "behavior": "Identify the collections lead as the person who may authorize the trial."},
+          "evidence_limit": {"kind": "source-inspection", "behavior": "State that the study covered six English-label corrections and did not test translated labels.", "required_sources": ["intake", "artifact"]},
+          "success_rule": {"kind": "source-inspection", "behavior": "State the proposed success rule as reviewing every submitted correction within two business days."},
+          "source_only": {"kind": "source-inspection", "behavior": "Keep observations within the supplied note. The note provides no measured correction durations and no results or improvements from the proposed trial.", "required_sources": ["intake", "artifact"]}
+        },
+        "budget": 3,
+        "timeout_seconds": 600
+      }
+    },
+    {
+      "id": "H-MIXED",
+      "artifacts": ["batch_flag.py", "batch-review-pilot.md"],
+      "direct_workflows": ["bmad-build-auto", "bmad-product-brief"],
+      "request": {
+        "kind": "mixed",
+        "intake": {
+          "kind": "forge",
+          "text": "Synthetic archive digitization handoff: Produce a pure standard-library Python function needs_review(scanned, unreadable). For nonnegative integers with unreadable <= scanned, return False for an empty batch. Flag a nonempty batch when unreadable pages are at least 20 percent of scanned pages. Propose a one-week manual-review pilot to the digitization coordinator, who decides whether to proceed. The fixture excludes handwritten pages. The tool only flags batches for human review."
+        },
+        "authority": {
+          "mode": "C",
+          "outcome": "Supply a runnable review flag and a brief whose proposed pilot uses the same rule",
+          "deliverable": "batch_flag.py and batch-review-pilot.md"
+        },
+        "checks": {
+          "threshold": {"kind": "executable", "behavior": "needs_review(20, 4) returns True and needs_review(20, 3) returns False."},
+          "empty": {"kind": "executable", "behavior": "needs_review(0, 0) returns False."},
+          "rule_alignment": {"kind": "source-inspection", "behavior": "The brief states both the inclusive 20 percent review threshold for nonempty batches and the empty-batch exception."},
+          "manual_owner": {"kind": "source-inspection", "behavior": "Propose a one-week pilot with manual review and identify the digitization coordinator as the decision owner."},
+          "evidence_limit": {"kind": "source-inspection", "behavior": "Disclose that handwritten pages were excluded from the fixture.", "required_sources": ["intake", "artifact"]}
+        },
+        "budget": 4,
+        "timeout_seconds": 600
+      }
+    }
+  ]
+}
