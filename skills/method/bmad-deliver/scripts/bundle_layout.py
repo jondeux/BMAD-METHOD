@@ -7,12 +7,14 @@ DELIVERY_FILES = (
     "bmod.toml",
     "references/native-host.md",
     "references/run-record.md",
+    "references/evaluate-delivery.md",
     "scripts/bundle_layout.py",
     "scripts/check_install.py",
     "scripts/codex_worker.py",
     "scripts/deliver.py",
     "scripts/native_host.py",
     "scripts/run_metrics.py",
+    "scripts/run_telemetry.py",
 )
 RUNTIME_FILES = ("config_utils.py", "memlog.py", "render_skill.py", "resolve_config.py", "resolve_customization.py")
 BUILD_FILES = (
@@ -45,6 +47,12 @@ REVIEW_FILES = (
 def worktree_inputs():
     files = {f"{SKILL}/{name}": name for name in ("LICENSE", "CONTRIBUTORS.md")}
     files.update({f"{SKILL}/{name}": f"skills/method/{SKILL}/{name}" for name in DELIVERY_FILES})
+    files.update(
+        {
+            f"{SKILL}/references/{name}": f".ai-context/delivery-u7/{name}"
+            for name in ("holdout-cases.json", "check_holdout_code.py")
+        }
+    )
     files.update({f"{NATIVE}/runtime/{name}": f"skills/core-tools/bmad/scripts/{name}" for name in RUNTIME_FILES})
     for workflow, source, members in (
         ("bmad-build-auto", "skills/method", BUILD_FILES),

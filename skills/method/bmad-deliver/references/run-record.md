@@ -51,6 +51,20 @@ python3 "$delivery" support _bmad-output/check-in-run > delivery-support.json
 
 Keep the rest of the run directory private. It contains the job packets, receipts, raw logs, and artifacts.
 
+### Shareable telemetry
+
+Each new run writes `telemetry.json` inside its private run directory. The controller refreshes the file after saving state and carries forward observed usage for settled attempts. Share this JSON by itself with an agent that needs to diagnose delivery. It contains fixed labels, counts, and relative timings. It excludes task text, owner answers, custom names and paths, artifact hashes and contents, command arguments, raw errors and logs, and credentials. It stays local until you choose to share it.
+
+For an interrupted or active run, or a run created with an older version, export a fresh snapshot. The export reads saved state without taking the mutation lock or altering the run.
+
+```bash
+python3 "$delivery" telemetry _bmad-output/check-in-run > delivery-telemetry.json
+```
+
+Use `usage.attempts` to follow controller dispatches in order. `process_outcome` distinguishes a worker exit, timeout, interruption, launch error, or inability to open the worker log. `status` describes the receipt decision. A successful verification receipt can still contain failing checks. `verification` preserves the verdict counts for each recorded verification. `gate` identifies the last owner decision or recovery pause recorded on that attempt. `receipt_source` distinguishes ordinary adoption, adoption on controller resume, and a receipt accepted after absence was recorded. `receipt_missing_after_seconds` retains when absence was recorded, even after late adoption. `budget_extensions` records the totals and dispatch counts when the owner extended the cap. Missing fields from older runs remain unknown or `null`.
+
+When the controller can read provider counters, the exported usage reports their coverage. Native subagent usage may remain unavailable. File writes are best effort, so if a run stops between saving state and writing the diagnostic, use the export command to read its current state.
+
 ### What workers receive
 
 Every dispatched job contains the original request and checks, accumulated owner answers, the current route, any saved artifacts and verification feedback, and the remaining budget and timeout.
@@ -171,7 +185,7 @@ Return one of the following receipts:
 - For `route`, return `status: ok`, a `deliverable`, `workflows` array, `rationale`, and `assumptions` array. In Mode B, the route can also declare its output class in `kind`. An assumption must be reversible. Cite why a workflow is needed.
 - For `build`, return `status: ok` and `artifacts`, each with relative `path` and full `content`. On repair the job contains the prior snapshot and verification. To propose replacement use `status: replace` and the route fields with new evidence in the rationale. In Mode B, a replacement can also declare its output class in `kind`.
 - For `verify`, return `status: ok` and `checks`, with `id`, `status` (pass, fail or inapplicable) and explanatory `evidence` for every original ID. For typed checks also include `verification_version: 2`, the job's `verification_id`, and the exact `artifact_sha256` map at the receipt root. Include the check's declared `kind` in every row. Verify the hashes of the actual snapshot before testing or inspecting it.
-- For a fault in an independent checker, return `status: checker-fault` and an `error` describing the checker failure. Omit `checks`. For typed checks include the same version, job ID, and artifact hash map as a verification receipt.
+- For a fault in an independent checker, return `status: checker-fault` and an `error` describing the checker failure. Omit `checks`. For typed checks include the same version, job ID, and artifact hash map as a verification receipt. A `checker-fault` or native `failed` receipt can optionally supply a shareable `diagnostic_code` of `configuration`, `dependency-unavailable`, `execution-error`, `preview-unreachable`, `selector-mismatch`, or `timeout`. The full error stays in the private run. Telemetry ignores unrecognized codes.
 - For a question requiring the owner, return `status: blocked` and `question` during any phase. The answer is persisted before a new call.
 
 For a typed executable pass the local checker must record an `observation` object in the check row. It contains the observed argument vector in `argv`, the integer `exit_code`, and captured strings `stdout` and `stderr`. Use empty strings for quiet streams. Keep relevant excerpts when full output would exceed the 4 MiB receipt limit. The checker should exit successfully on the expected behavior, including when it tests an expected failure. The controller treats the owner-configured checker as the source of execution observations.

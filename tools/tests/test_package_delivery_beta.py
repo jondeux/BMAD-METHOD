@@ -51,6 +51,12 @@ def test_matching_input_manifest_reproduces_the_archive(builder, monkeypatch, tm
         assert manifest["worktree_sources"]["bmad-deliver/scripts/deliver.py"] == (
             "skills/method/bmad-deliver/scripts/deliver.py"
         )
+        assert {
+            "bmad-deliver/scripts/run_telemetry.py",
+            "bmad-deliver/references/evaluate-delivery.md",
+            "bmad-deliver/references/holdout-cases.json",
+            "bmad-deliver/references/check_holdout_code.py",
+        } <= members
         assert set(manifest["files"]) == members - {builder.SOURCE_MANIFEST, "SHA256SUMS"}
         assert set(manifest["files"]) == {"INSTALL.md", *manifest["worktree_sources"], *manifest["historical_sources"]}
         for name, expected in manifest["files"].items():
@@ -89,6 +95,28 @@ def test_missing_historical_object_leaves_no_archive(monkeypatch, tmp_path, caps
     message = capsys.readouterr().err
     assert "Cannot read Product Brief input" in message and "checkout with the pinned commit" in message
     assert not archive.exists()
+
+
+def test_packaged_holdout_checker_observes_each_check_independently(builder, monkeypatch, tmp_path):
+    archive = tmp_path / "candidate.zip"
+    pack(builder, monkeypatch, archive)
+    member = "bmad-deliver/references/check_holdout_code.py"
+    with ZipFile(archive) as package:
+        checker = Path(package.extract(member, tmp_path))
+    artifact = tmp_path / "batch_flag.py"
+    artifact.write_text(
+        "print('loading artifact')\ndef needs_review(scanned, unreadable):\n"
+        "    if scanned == 0:\n        raise ValueError('empty batch')\n    return unreadable * 5 >= scanned\n"
+    )
+    argv = [sys.executable, "-I", "-B", str(checker), "H-MIXED", str(artifact), "--check"]
+    for check_id, expected_exit in (("threshold", 0), ("empty", 1)):
+        result = subprocess.run([*argv, check_id], text=True, capture_output=True, timeout=10)
+        assert result.returncode == expected_exit
+        [row] = json.loads(result.stdout)
+        assert row["id"] == check_id and row["passed"] is (expected_exit == 0)
+        assert "loading artifact" in result.stderr
+        if expected_exit == 1:
+            assert row["cases"][0]["error_type"] == "ValueError"
 
 
 def test_checker_keeps_a_legacy_install_available_and_detects_candidate_damage(builder, monkeypatch, tmp_path):

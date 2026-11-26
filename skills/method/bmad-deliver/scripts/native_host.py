@@ -28,6 +28,7 @@ from deliver import (
     require,
     validate_artifacts,
 )
+from run_telemetry import DIAGNOSTIC_CODES
 
 BUNDLED_NATIVE = Path(__file__).resolve().parents[1] / "assets/native"
 
@@ -172,6 +173,7 @@ def main():
     failed = commands.add_parser("fail")
     failed.add_argument("job", type=Path)
     failed.add_argument("--reason", required=True)
+    failed.add_argument("--diagnostic-code", choices=DIAGNOSTIC_CODES)
     args = parser.parse_args()
     try:
         job_path = args.job.resolve(strict=True)
@@ -191,7 +193,10 @@ def main():
         else:
             read_job(job_path)
             require(bool(args.reason.strip()), "native failure reason is required")
-            commit_receipt(job_path, {"status": "failed", "error": args.reason})
+            result = {"status": "failed", "error": args.reason}
+            if args.diagnostic_code:
+                result["diagnostic_code"] = args.diagnostic_code
+            commit_receipt(job_path, result)
     except (OSError, ValueError, KeyError) as exc:
         print(f"Native BMad host: {exc}", file=sys.stderr)
         return 1

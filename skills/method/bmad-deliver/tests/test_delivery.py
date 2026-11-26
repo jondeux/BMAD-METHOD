@@ -81,6 +81,7 @@ def typed_result():
     if scenario == "evidence-checker-fault" and not (job_file.parents[3] / "checker-repaired").is_file():
         return {
             "status": "checker-fault", "error": "The checker configuration is missing.",
+            "diagnostic_code": "configuration",
             "verification_version": 2, "verification_id": job["verification_id"], "artifact_sha256": hashes,
         }
     rows = []
@@ -316,6 +317,10 @@ def test_code_recovers_receipt_without_redispatch_and_enforces_budget(workspace,
             assert active["status"] == "dispatched"
             assert active["pending_attempt"]["job"] == str(attempt / "job.json")
             assert "Wait for the worker" in active["next_action"]
+            active_telemetry = command("telemetry", str(run))
+            assert active_telemetry == json.loads((run / "telemetry.json").read_text())
+            assert active_telemetry["usage"]["attempts"][1]["status"] == "dispatched"
+            assert (run / "telemetry.json").stat().st_mode & 0o777 == 0o600
             assert "in progress" in command("resume", str(run), expect=1)
             controller.kill()
             controller.wait(timeout=5)
@@ -333,6 +338,7 @@ def test_code_recovers_receipt_without_redispatch_and_enforces_budget(workspace,
     assert resumed.returncode == 2
     paused = json.loads(stdout)
     assert (paused["status"], paused["phase"], paused["dispatched"]) == ("budget-exhausted", "verify", 2)
+    assert command("telemetry", str(run))["usage"]["attempts"][1]["gate"] == "budget-exhausted"
     assert not (run / "artifacts").exists()
 
     result = command("resume", str(run), "--budget", "3")
@@ -345,12 +351,20 @@ def test_code_recovers_receipt_without_redispatch_and_enforces_budget(workspace,
     assert [row["phase"] for row in state(run)["attempts"]] == ["route", "build", "verify"]
     assert (run / "artifacts" / "booking.py").read_text().startswith("def conflict")
     assert command("resume", str(run))["dispatched"] == 3
+    telemetry = command("telemetry", str(run))
+    assert telemetry == json.loads((run / "telemetry.json").read_text())
+    assert telemetry["usage"]["attempts"][1]["receipt_source"] == "resumed-controller"
+    assert telemetry["usage"]["attempts"][1]["gate"] == "budget-exhausted"
+    assert telemetry["usage"]["attempts"][2]["process_exit_code"] == 0
+    assert telemetry["budget_extensions"] == [{"after_dispatch": 2, "total": 3}]
+    assert telemetry["published_artifacts"] == 1
 
 
 def test_document_requires_real_approval_and_explicit_retry_without_a_receipt(workspace, monkeypatch):
     run = workspace / "run"
     pending = command(*prepare(workspace, mode="A", budget=2), expect=2)
     assert (pending["status"], pending["dispatched"]) == ("approval-required", 1)
+    assert command("telemetry", str(run))["usage"]["attempts"][0]["gate"] == "approval-required"
     assert command("resume", str(run), expect=2)["dispatched"] == 1
     assert "approval must name proposal" in command("resume", str(run), "--approve", "wrong", expect=1)
     attempt = run / "attempts" / "2"
@@ -813,6 +827,8 @@ print(json.dumps({"type": "turn.completed", "usage": {
     assert usage["observed_tokens"]["cached_input_tokens"] == observed_events * 2
     assert [row["source"] for row in usage["attempts"][:observed_events]] == ["provider-stdout"] * observed_events
     assert command("support", str(workspace / "run"))["usage"] == usage
+    emitted = json.loads((workspace / "run" / "telemetry.json").read_text())
+    assert emitted["usage"]["observed_tokens"] == usage["observed_tokens"]
     attempt = workspace / "run" / "attempts" / "1"
     assert "96665" in (attempt / "worker.log").read_text()
     assert "96665" not in (attempt / "provider.jsonl").read_text()
@@ -835,6 +851,10 @@ def test_reverify_reuses_build_after_checker_repair(workspace):
     assert record["build_attempt"] == 2
     assert [attempt["phase"] for attempt in record["attempts"]] == ["route", "build", "verify", "verify"]
     assert json.loads((run / "attempts" / "3" / "receipt.json").read_text())["checks"][0]["status"] == "fail"
+    telemetry = command("telemetry", str(run))
+    failed, passed = telemetry["usage"]["attempts"][2:]
+    assert (failed["status"], failed["verification"]["fail"], failed["diagnostic_code"]) == ("ok", 1, None)
+    assert (passed["retry"], passed["verification"]["pass"]) == ("reverify", 1)
 
 
 @pytest.mark.parametrize(("typed", "budget"), [(False, 4), (True, 4), (True, 3)])
@@ -849,6 +869,12 @@ def test_checker_fault_pauses_and_reverifies_the_same_build(workspace, typed, bu
     assert (fault["status"], fault["phase"], fault["dispatched"]) == ("checker-fault", "verify", 3)
     assert "configuration is missing" in fault["error"]
     assert "resume --reverify" in fault["next_action"]
+    report = (run / "telemetry.json").read_text()
+    assert "configuration is missing" not in report
+    summary = json.loads(report)
+    checker = summary["usage"]["attempts"][2]
+    assert (checker["status"], checker["gate"], checker["verification"]) == ("checker-fault", "checker-fault", None)
+    assert checker["diagnostic_code"] == ("configuration" if typed else None)
     assert command("status", str(run)) == fault
     assert command("resume", str(run), expect=2) == fault
     assert "no interrupted attempt" in command("resume", str(run), "--retry", expect=1)
@@ -985,6 +1011,13 @@ def test_native_receipt_before_and_after_timeout_is_adopted_once(workspace, time
     assert state(run)["attempt_version"] == 1
     assert [attempt["phase"] for attempt in state(run)["attempts"]] == ["route", "build", "verify"]
     assert [item["attempt"] for item in result["native_runs"]] == [2]
+    attempt = command("telemetry", str(run))["usage"]["attempts"][1]
+    assert attempt["receipt_source"] == ("late-receipt" if timed_out else "current-controller")
+    if timed_out:
+        assert attempt["dispatched_after_seconds"] < attempt["receipt_missing_after_seconds"]
+        assert attempt["receipt_missing_after_seconds"] <= attempt["resolved_after_seconds"]
+    else:
+        assert attempt["receipt_missing_after_seconds"] is None
     assert "closed for receipts" in native_host(*submission, expected=1)
 
 
@@ -1298,3 +1331,30 @@ def test_native_mixed_replays_code_receipt_without_duplicate_work(workspace, typ
         assert final["native_runs"][0]["artifact_sources"] == {sql_path: "workspace/query.sql"}
         assert final["native_runs"][0]["evidence"]["workspace/query.sql"] == final["artifact_sha256"][sql_path]
         assert (run / "artifacts" / sql_path).read_bytes() == sql_content.encode()
+
+
+def test_telemetry_write_failure_still_publishes(workspace):
+    run = workspace / "run"
+    proposal = command(*prepare(workspace, mode="A"), expect=2)["proposal"]["id"]
+    sidecar = run / "telemetry.json"
+    sidecar.unlink()
+    sidecar.mkdir()
+    with launch("resume", str(run), "--approve", proposal) as process:
+        stdout, stderr = process.communicate(timeout=20)
+        assert process.returncode == 0, (stdout, stderr)
+    assert json.loads(stdout)["status"] == "complete"
+    assert stderr.count("unable to write telemetry snapshot") == 1
+    fresh = command("telemetry", str(run))
+    assert fresh["status"] == "complete"
+    assert fresh["owner_inputs"] == {"answers": 0, "approvals": 1, "proposals": 1}
+    assert sidecar.is_dir()
+
+
+def test_telemetry_records_an_unopenable_worker_log(workspace):
+    run = workspace / "run"
+    proposal = command(*prepare(workspace, mode="A"), expect=2)["proposal"]["id"]
+    (run / "attempts" / "2" / "worker.log").mkdir(parents=True)
+    assert command("resume", str(run), "--approve", proposal, expect=2)["status"] == "interrupted"
+    attempt = command("telemetry", str(run))["usage"]["attempts"][1]
+    assert attempt["process_outcome"] == "log-open-error"
+    assert attempt["status"] == "no-receipt"

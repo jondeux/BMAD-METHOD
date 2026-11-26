@@ -13,6 +13,8 @@ Native code jobs dispatch `bmad-build-auto`. Native document jobs dispatch `bmad
 
 Native preparation copies the request's [language settings](run-record.md#native-language-settings) into the workspace configuration. Include those settings in the workflow instructions when the workflow takes its language from the conversation.
 
+When recording a native failure, add `--diagnostic-code` to `native_host.py fail` if a [supported category](run-record.md#shareable-telemetry) applies. The error text stays in the private receipt.
+
 Use `native_host.py submit JOB --terminal WORKSPACE_PATH --artifact PUBLISHED_PATH=WORKSPACE_PATH` to submit the workflow's actual files. Repeat `--artifact` for additional deliverables and `--evidence` for logs or rendered manifests. Build Auto supplies its completed plan with an Auto Run Result. Product Brief supplies its native headless completion JSON linking the brief and memlog. The helper makes one durable receipt and the controller checks evidence hashes before accepting it.
 
 If submission reports a receipt above 4 MiB, keep the required deliverable and checks, reduce the artifact text or omit optional files, and resubmit the same job. If the controller timed out, submit completed work against the same pending attempt and resume that run. Submission and retry share a lock for that attempt. A valid committed receipt takes priority over retry. Once retry closes an attempt, use the new job from status.

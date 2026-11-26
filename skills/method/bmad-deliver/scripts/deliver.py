@@ -23,6 +23,7 @@ from time import time
 from uuid import uuid4
 
 from run_metrics import run_metrics, support_summary
+from run_telemetry import DIAGNOSTIC_CODES, GATES, TELEMETRY_FILE, telemetry_summary, verification_counts
 
 MAX_JSON_BYTES = 4 * 1024 * 1024
 ATTEMPT_VERSION = 1
@@ -430,6 +431,8 @@ class Delivery:
         self.run = run
         self.state = state
         self.lock_fd = lock_fd
+        self.telemetry_warned = False
+        self.settled_usage = {}
 
     @property
     def request(self):
@@ -442,6 +445,18 @@ class Delivery:
     def save(self):
         self.state["attempt_version"] = ATTEMPT_VERSION
         write_json(self.run / "state.json", self.state)
+        self.save_telemetry()
+
+    def save_telemetry(self, *, metrics=None):
+        try:
+            if metrics is None:
+                metrics = run_metrics(self.run, self.state, settled_usage=self.settled_usage)
+            snapshot = telemetry_summary(self.run, self.state, metrics=metrics)
+            write_json(self.run / TELEMETRY_FILE, snapshot)
+        except OSError:
+            if not self.telemetry_warned:
+                print("BMAD delivery: unable to write telemetry snapshot. Use the telemetry command.", file=sys.stderr)
+                self.telemetry_warned = True
 
     def receipt(self, attempt):
         return self.run / "attempts" / str(attempt) / "receipt.json"
@@ -536,7 +551,12 @@ class Delivery:
         self.state["attempts"].append(attempt)
         self.state["status"] = "dispatched"
         self.save()
-        with (path / "worker.log").open("ab") as log:
+        try:
+            log = (path / "worker.log").open("ab")
+        except OSError:
+            attempt["process_outcome"] = "log-open-error"
+            return
+        with log:
             try:
                 with subprocess.Popen(
                     [*worker, str(path / "job.json"), str(self.receipt(num))],
@@ -548,11 +568,16 @@ class Delivery:
                     pass_fds=(self.lock_fd,),
                 ) as proc:
                     try:
-                        proc.wait(timeout=job["timeout_seconds"])
-                    except (subprocess.TimeoutExpired, KeyboardInterrupt):
+                        exit_code = proc.wait(timeout=job["timeout_seconds"])
+                        attempt.update(process_outcome="exited", process_exit_code=exit_code)
+                    except (subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
+                        attempt["process_outcome"] = (
+                            "timed-out" if isinstance(exc, subprocess.TimeoutExpired) else "interrupted"
+                        )
                         os.killpg(proc.pid, signal.SIGKILL)
-                        proc.wait()
+                        attempt["process_exit_code"] = proc.wait()
             except OSError as exc:
+                attempt.setdefault("process_outcome", "launch-error")
                 log.write(f"{exc}\n".encode())
 
     def propose(self, route, attempt, *, reason=None):
@@ -670,6 +695,7 @@ class Delivery:
                 validate_verification(result, self.request, self.artifacts(), attempt)
                 self.state["verification_artifact_sha256"] = attempt["artifact_sha256"]
             self.state["verification"] = rows
+            attempt["verification_counts"] = verification_counts(rows)
             if all(row["status"] == "pass" for row in rows):
                 self.state.update(phase="publish", status="ready")
             else:
@@ -677,12 +703,15 @@ class Delivery:
                 if self.state.get("native_worker"):
                     self.state["native_partial"] = []
 
-    def recover_attempt(self, attempt):
+    def recover_attempt(self, attempt, *, resumed=False):
         """Adopt a receipt or record its absence while holding the attempt lock."""
         receipt = self.receipt(attempt["number"])
         if not receipt.exists():
             if attempt["status"] == "dispatched":
-                attempt.update(status="no-receipt", resolved_at=time())
+                observed_at = time()
+                attempt.update(
+                    status="no-receipt", resolved_at=observed_at, receipt_missing_at=observed_at, gate="interrupted"
+                )
                 self.state.update(status="interrupted", error=f"No durable receipt for attempt {attempt['number']}")
                 self.save()
             return False
@@ -692,20 +721,35 @@ class Delivery:
             validate_receipt(result, attempt["phase"], self.request["checks"])
             self.state.pop("error", None)
             self.apply(result, attempt)
+            if attempt["status"] == "no-receipt":
+                attempt["receipt_source"] = "late-receipt"
+            else:
+                attempt["receipt_source"] = "resumed-controller" if resumed else "current-controller"
             attempt["status"] = result["status"]
+            if result["status"] in ("checker-fault", "failed") and result.get("diagnostic_code") in DIAGNOSTIC_CODES:
+                attempt["diagnostic_code"] = result["diagnostic_code"]
         except (OSError, ValueError, KeyError) as exc:
             attempt["status"] = "invalid-receipt"
             self.state.update(status="interrupted", error=f"Invalid worker receipt: {exc}")
         attempt["resolved_at"] = time()
+        status = self.state["status"]
+        if status in GATES:
+            attempt["gate"] = status
         self.save()
         return attempt["status"] != "invalid-receipt"
 
-    def recover(self):
+    def recover(self, *, resumed=False):
         attempt = pending_attempt(self.state)
         if attempt is not None:
             with attempt_decision(self.receipt(attempt["number"]).parent):
-                return self.recover_attempt(attempt)
+                return self.recover_attempt(attempt, resumed=resumed)
         return False
+
+    def exhaust_budget(self):
+        self.state["status"] = "budget-exhausted"
+        if self.state["attempts"]:
+            self.state["attempts"][-1]["gate"] = "budget-exhausted"
+        self.save()
 
     def retry(self):
         attempt = self.state["attempts"][-1]
@@ -714,8 +758,7 @@ class Delivery:
                 return
             if attempt["status"] == "no-receipt":
                 if len(self.state["attempts"]) >= self.state["budget"]:
-                    self.state["status"] = "budget-exhausted"
-                    self.save()
+                    self.exhaust_budget()
                     return
                 attempt["status"] = "superseded"
             self.state.pop("error", None)
@@ -733,8 +776,7 @@ class Delivery:
                 self.save()
                 return
             if len(self.state["attempts"]) == self.state["budget"]:
-                self.state["status"] = "budget-exhausted"
-                self.save()
+                self.exhaust_budget()
                 return
             self.dispatch()
             self.recover()
@@ -753,7 +795,7 @@ class Delivery:
         waiting_for_retry_budget = (
             self.state["status"] == "budget-exhausted" and pending_attempt(self.state) is not None
         )
-        recovered = self.recover()
+        recovered = self.recover(resumed=True)
         status = self.state["status"]
         if args.approve is not None:
             require(status == "approval-required", "no proposal is waiting for approval")
@@ -804,7 +846,7 @@ class Delivery:
         self.save()
         self.advance()
 
-    def summary(self):
+    def summary(self, *, metrics=None):
         state = self.state
         status = state["status"]
         keys = (
@@ -844,7 +886,7 @@ class Delivery:
             }
             summary["pending_attempt"]["job"] = str(self.receipt(pending["number"]).with_name("job.json"))
         summary["next_action"] = self.next_action(status, pending)
-        summary.update(run_metrics(self.run, state))
+        summary.update(run_metrics(self.run, state) if metrics is None else metrics)
         return summary
 
     def next_action(self, status, pending):
@@ -912,6 +954,7 @@ def parse_args():
     resume.add_argument("--budget", type=int, metavar="NEW_TOTAL")
     subcommands.add_parser("status").add_argument("run", type=Path)
     subcommands.add_parser("support", help="print a content-free support summary").add_argument("run", type=Path)
+    subcommands.add_parser("telemetry", help="export a shareable run diagnostic").add_argument("run", type=Path)
     return parser.parse_args()
 
 
@@ -967,10 +1010,15 @@ def main():
     args = parse_args()
     try:
         run = args.run.resolve()
-        if args.command in ("status", "support"):
+        if args.command in ("status", "support", "telemetry"):
             require((run / "state.json").is_file(), "run state not found")
             state = read_state(run)
-            summary = support_summary(run, state) if args.command == "support" else Delivery(run, state, None).summary()
+            if args.command == "telemetry":
+                summary = telemetry_summary(run, state)
+            elif args.command == "support":
+                summary = support_summary(run, state)
+            else:
+                summary = Delivery(run, state, None).summary()
             print(json.dumps(summary, ensure_ascii=False, indent=2))
             return 0
         if args.command == "start":
@@ -991,12 +1039,18 @@ def main():
                 delivery.advance()
             elif args.command == "resume":
                 delivery.resume(args)
-            print(json.dumps(delivery.summary(), ensure_ascii=False, indent=2))
+            metrics = run_metrics(run, state)
+            delivery.save_telemetry(metrics=metrics)
+            print(json.dumps(delivery.summary(metrics=metrics), ensure_ascii=False, indent=2))
             return 0 if state["status"] == "complete" else 2
     except BlockingIOError:
         print("This run has a controller or worker in progress.", file=sys.stderr)
     except (OSError, ValueError, KeyError, RuntimeError) as exc:
-        error = "unable to read the saved support snapshot" if args.command == "support" else str(exc)
+        messages = {
+            "support": "unable to read the saved support snapshot",
+            "telemetry": "unable to read the saved telemetry snapshot",
+        }
+        error = messages.get(args.command, str(exc))
         print(f"BMAD delivery: {error}", file=sys.stderr)
     return 1
 

@@ -140,6 +140,16 @@ $bmad-deliver Mode C. Deliver a finished slide deck as a .pptx file.
 To resume, give the same skill the saved run path. See the
 [run and receipt contract](bmad-deliver/references/run-record.md) and
 [workspace host instructions](bmad-deliver/references/native-host.md).
+
+Each run saves a local `telemetry.json` with shareable diagnostics. From the
+extracted bundle, export a fresh copy after a crash or for an older run.
+
+```bash
+python3 -B bmad-deliver/scripts/deliver.py telemetry /path/to/run > delivery-telemetry.json
+```
+
+See the [U7 evaluation guide](bmad-deliver/references/evaluate-delivery.md) for
+checker preflight and the bundled evaluation cases.
 """
 
 

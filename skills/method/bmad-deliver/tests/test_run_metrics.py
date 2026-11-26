@@ -153,14 +153,27 @@ def test_support_only_projects_known_labels_and_accounting(tmp_path):
     run = saved_run(
         tmp_path / path,
         [
-            {"phase": phase, "status": state, "number": path, "retry": retry, "started_at": credential},
-            {"phase": "build", "status": "ok", "workflow": workflow, "retry": None},
+            {
+                "phase": phase,
+                "status": state,
+                "number": path,
+                "retry": retry,
+                "started_at": credential,
+                "process_outcome": error,
+                "process_exit_code": error,
+                "gate": state,
+                "diagnostic_code": credential,
+                "receipt_source": log,
+                "verification_counts": {"pass": prompt, artifact: 1},
+            },
+            {"phase": "build", "status": "ok", "workflow": workflow, "retry": None, "native": {"status": workflow}},
         ],
         status=state,
         phase=phase,
         budget=credential,
         started_at=credential,
-        request={"intake": {"text": intake}},
+        request={"kind": error, "authority": {"mode": answer}, "intake": {"kind": intake, "text": intake}},
+        budget_extensions=[{"after_dispatch": credential, "total": credential, "reason": error}],
         answers=[answer],
         route={"rationale": prompt},
         native_worker=["/python", credential, "wait"],
@@ -184,6 +197,17 @@ def test_support_only_projects_known_labels_and_accounting(tmp_path):
     assert result["usage"]["native_nested_usage"] == "unavailable"
     assert result["usage"]["attempts"][1]["workflow"] == "unknown"
     assert result["usage"]["attempts"][1]["observed_tokens"] is None
+    exported = cli("telemetry", run)
+    assert all(secret not in exported for secret in secrets)
+    telemetry = json.loads(exported)
+    assert telemetry["format"] == "bmad-delivery-telemetry"
+    assert telemetry["authority_mode"] is telemetry["output_class"] is telemetry["intake_kind"] is None
+    assert telemetry["budget_extensions"] == [{"after_dispatch": None, "total": None}]
+    assert telemetry["usage"]["attempts"][0]["diagnostic_code"] is None
+    assert telemetry["usage"]["attempts"][0]["verification"] == dict.fromkeys(
+        ("pass", "fail", "inapplicable", "unknown")
+    )
+    assert not (run / "telemetry.json").exists()
     assert (run / "state.json").read_bytes() == snapshot
     assert not (run / ".lock").exists()
 
@@ -214,6 +238,29 @@ def test_support_elapsed_time_uses_saved_activity(tmp_path):
     assert result["retries"] == {"recorded": 1, "attempts_without_metadata": 0}
 
 
+def test_telemetry_checkpoint_retains_settled_provider_usage(tmp_path):
+    run = saved_run(
+        tmp_path / "run",
+        [{"phase": "route", "status": "ok"}, {"phase": "build", "status": "dispatched"}],
+        status="dispatched",
+    )
+    append_log(run, 1, usage_event(10, 2, 3))
+    append_log(run, 2, usage_event(99, 2, 3))
+    script = """
+from pathlib import Path
+import sys
+sys.path.insert(0, sys.argv[1])
+from deliver import Delivery, read_state
+run = Path(sys.argv[2])
+Delivery(run, read_state(run), None).save_telemetry()
+"""
+    subprocess.run([sys.executable, "-B", "-c", script, str(RUNNER.parent), str(run)], check=True, timeout=10)
+    telemetry = json.loads((run / "telemetry.json").read_text())
+    assert telemetry["usage"]["attempts"][0]["observed_tokens"]["input_tokens"] == 10
+    assert telemetry["usage"]["attempts"][1]["observed_tokens"] is None
+    assert json.loads(cli("telemetry", run))["usage"]["observed_tokens"]["input_tokens"] == 109
+
+
 def test_support_survives_unreadable_logs(tmp_path):
     run = saved_run(tmp_path / "run", [{"phase": "route"}])
     append_log(run, 1, usage_event(10, 2, 1))
@@ -226,11 +273,12 @@ def test_support_survives_unreadable_logs(tmp_path):
         directory.chmod(0o700)
 
 
-def test_support_error_omits_private_paths_and_content(tmp_path):
+def test_shareable_export_errors_omit_private_paths_and_content(tmp_path):
     run = saved_run(tmp_path / "PRIVATE-run-path", [None], request={"text": "PRIVATE-request"})
-    result = subprocess.run(
-        [sys.executable, "-B", str(RUNNER), "support", str(run)], text=True, capture_output=True, timeout=10
-    )
-    assert result.returncode == 1
-    assert result.stdout == ""
-    assert result.stderr == "BMAD delivery: unable to read the saved support snapshot\n"
+    for command in ("support", "telemetry"):
+        result = subprocess.run(
+            [sys.executable, "-B", str(RUNNER), command, str(run)], text=True, capture_output=True, timeout=10
+        )
+        assert result.returncode == 1
+        assert result.stdout == ""
+        assert result.stderr == f"BMAD delivery: unable to read the saved {command} snapshot\n"

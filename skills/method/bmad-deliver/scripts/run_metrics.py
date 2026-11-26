@@ -155,14 +155,22 @@ def total_tokens(observed):
     return totals
 
 
-def run_metrics(run, state):
+def run_metrics(run, state, *, settled_usage=None):
     start = timestamp(state.get("started_at"))
     times = [start, timestamp(state.get("completed_at"))]
     attempts = []
     for number, attempt in enumerate(state["attempts"], 1):
         worker = worker_kind(state, attempt)
         directory = run / "attempts" / str(number)
-        tokens, coverage, source = provider_usage(directory) if worker == "codex" else (None, "unavailable", None)
+        tokens, coverage, source = None, "unavailable", None
+        if worker == "codex":
+            if settled_usage is None:
+                tokens, coverage, source = provider_usage(directory)
+            elif attempt.get("status") != "dispatched":
+                # A controller can reuse final counters for settled attempts until its next invocation.
+                if number not in settled_usage:
+                    settled_usage[number] = provider_usage(directory)
+                tokens, coverage, source = settled_usage[number]
         started = timestamp(attempt.get("started_at"))
         resolved = timestamp(attempt.get("resolved_at"))
         times.extend((started, resolved))
