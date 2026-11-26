@@ -30,7 +30,7 @@ The installer writes one directory per skill, each holding a `SKILL.md`, into a 
 
 | Tool                                                  | Skills directory  |
 | ----------------------------------------------------- | ----------------- |
-| Claude Code                                           | `.claude/skills/` |
+| Claude Code                                           | `.claude/skills/` <!-- freshness-example: .claude/skills/ --> |
 | Cursor, Windsurf, Codex, Auggie, Amp, and most others | `.agents/skills/` |
 | Cline                                                 | `.cline/skills/`  |
 | IBM Bob                                               | `.bob/skills/`    |
@@ -154,7 +154,7 @@ Coaches you through one document from a template library, then updates or valida
 **Output:** `<id>-<slug>.md` with a `.memlog.md` and review files in its own folder, any companion files the template asks for, and an optional HTML view, which a pitch deck renders as slides.
 
 :::note[Example]
-`bmad-facilitate coach me through a security review covering the OWASP Top 10, output to docs/owasp`
+`bmad-facilitate coach me through a security review covering the OWASP Top 10, output to docs/owasp` <!-- freshness-example: docs/owasp -->
 :::
 
 ### bmad-party-mode

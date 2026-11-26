@@ -35,7 +35,7 @@ Larkspur's product lead wants two changes to every PRD:
 
 ## Step 1: Give the Coach a Catalog to Read
 
-The metrics rule points at a file your team keeps. For this tutorial, create `docs/metrics-catalog.md` with a few rows:
+The metrics rule points at a file your team keeps. For this tutorial, create `docs/metrics-catalog.md` with a few rows: <!-- freshness-example: docs/metrics-catalog.md -->
 
 ```markdown
 # Metrics catalog

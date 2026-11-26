@@ -33,3 +33,7 @@ Open source framework for structured, agent-assisted software delivery. Skills l
 - Automated tests assert outcomes produced by deterministic code. Do not write automated tests for LLM output or for static source text.
 
 <!-- /bmad:context -->
+
+## Documentation freshness
+
+Run the [freshness routine](docs/reference/document-freshness.md) after module moves, milestones, or a failing check. Run it as part of the current work without asking. The checker only reads files and never commits.

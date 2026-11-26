@@ -1,0 +1,18 @@
+name: Documentation freshness
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Test reference detection
+        run: python3 -B -m unittest discover -s docs/_checks -p 'test_*.py'
+      - name: Check repository references
+        run: python3 -B docs/_checks/check_references.py

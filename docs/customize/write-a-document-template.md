@@ -171,7 +171,7 @@ The template list reports an id that names no heading, an id listed twice, and a
 
 Say what goes in each section, not how to write well. Leave out example content, which the model would copy.
 
-A section comment can also steer the conversation or limit the answer, in plain sentences. The `Steps` comment above tells the skill when to press, and `Severity` limits the user to a list. A list can live elsewhere: "The user must pick a team from `docs/teams.md`." The shipped `decision-record` and `security-review` templates show both, and [Document Templates](../reference/document-templates.md) lists where to see each capability.
+A section comment can also steer the conversation or limit the answer, in plain sentences. The `Steps` comment above tells the skill when to press, and `Severity` limits the user to a list. A list can live elsewhere. For example, tell the user to pick a team from a team-owned `docs/teams.md`. The shipped `decision-record` and `security-review` templates show both, and [Document Templates](../reference/document-templates.md) lists where to see each capability. <!-- freshness-example: docs/teams.md -->
 
 ### Walk the sections in order
 

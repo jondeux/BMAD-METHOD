@@ -235,7 +235,7 @@ Personal settings stay in each developer's own
 BMad customizations load when a skill activates. Most IDE tools also load
 a global instruction file at the start of every session, before any skill
 runs: `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/`, or
-`.github/copilot-instructions.md`. For a rule that should hold in a plain
+`.github/copilot-instructions.md`. For a rule that should hold in a plain <!-- freshness-example: .github/copilot-instructions.md -->
 chat with no skill active, restate it there too, if it is short enough to
 repeat.
 
