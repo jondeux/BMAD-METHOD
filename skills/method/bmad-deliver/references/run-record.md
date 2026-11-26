@@ -61,6 +61,26 @@ The controller dispatches verification after the native builds. For executable c
 
 Use `code`, `non-code`, or `mixed`. The intake kinds are `idea`, `literature`, `brainstorm`, and `forge`. Set a positive worker-call budget and provide at least one acceptance check. The original checks are mandatory. Use stable IDs. For B supply explicit delegation limits. For C supply the named deliverable. For A request a specific proposal and approve it before building. When acceptance or authority requires information from a real stakeholder, the run waits for the owner.
 
+### Mode B delegation
+
+Mode B requires prose `limits`, structured `boundaries`, or both. Each allowlist is optional. When supplied, it must contain at least one entry. Use the owner's exact deliverable labels, including case and punctuation.
+
+```json
+{
+  "mode": "B",
+  "outcome": "Decide whether to trial a booking release policy",
+  "limits": ["Local draft only", "Preserve the study limitation"],
+  "boundaries": {
+    "allowed_output_classes": ["non-code"],
+    "allowed_deliverables": ["Director decision brief", "One-page decision memo"]
+  }
+}
+```
+
+The request's `kind` sets the output class for the whole run. It must be on `allowed_output_classes` when supplied. A route may declare its class with `kind`. Omitted route classes inherit the request class. When the class allowlist is present, the route must also exclude known native workflows for a different class. When both allowlists are present, the route must satisfy both. The controller stops a conflicting route before dispatch and records the error. To change a structured boundary, obtain owner authorization for a new request.
+
+An allowlisted deliverable can proceed automatically. Without a name allowlist, an explicit `authority.deliverable` can identify a route under prose limits. If the proposed name differs from that label or the owner supplied no label, the controller saves a proposal and its reason for owner approval. A class-only boundary without prose permits any deliverable within the fixed class. Workers must follow the prose limits in every phase. The controller checks route fields and cannot infer a deliverable's contents or interpret prose limits from its name. Previously selected routes remain readable and retain their recorded decisions.
+
 ## Resume and verify
 
 | Status | Action |
@@ -75,7 +95,7 @@ A bare resume reuses committed receipts and advances stages with available budge
 
 ## Persisted record and worker interface
 
-The run contains a versioned `state.json`, `attempts/<number>/job.json`, the worker log and any committed `receipt.json`. State stores the original request, current budget and its extensions, phase, dispatches, owner answers and approvals, B replacements, verification results and published file hashes. The run lock also covers a subprocess that outlives the controller. A complete receipt is replayable. A missing or malformed receipt stops for an explicit retry.
+The run contains a versioned `state.json`, `attempts/<number>/job.json`, the worker log and any committed `receipt.json`. State stores the original request, current budget and its extensions, phase, dispatches, owner answers and approvals, B replacements, verification results and published file hashes. An owner-approved Mode B replacement records its proposal ID in `approval`. The run lock also covers a subprocess that outlives the controller. A complete receipt is replayable. A missing or malformed receipt stops for an explicit retry.
 
 A trusted worker receives two arguments, the absolute job path and absolute receipt path, and runs in the attempt directory. It reads the job and writes a single JSON receipt using a temporary file, fsync and atomic rename. Treat the executable and its provider as part of the trusted environment. Limit effects to this delivery.
 
@@ -93,8 +113,8 @@ The job has these fields at every phase:
 
 Return one of the following receipts:
 
-- For `route`, return `status: ok`, a `deliverable`, `workflows` array, `rationale`, and `assumptions` array. An assumption must be reversible. Cite why a workflow is needed.
-- For `build`, return `status: ok` and `artifacts`, each with relative `path` and full `content`. On repair the job contains the prior snapshot and verification. To propose replacement use `status: replace` and the route fields with new evidence in the rationale.
+- For `route`, return `status: ok`, a `deliverable`, `workflows` array, `rationale`, and `assumptions` array. In Mode B, the route can also declare its output class in `kind`. An assumption must be reversible. Cite why a workflow is needed.
+- For `build`, return `status: ok` and `artifacts`, each with relative `path` and full `content`. On repair the job contains the prior snapshot and verification. To propose replacement use `status: replace` and the route fields with new evidence in the rationale. In Mode B, a replacement can also declare its output class in `kind`.
 - For `verify`, return `status: ok` and `checks`, with `id`, `status` (pass, fail or inapplicable) and observed `evidence` for every original ID. The verifier executes or inspects the snapshot. The runner validates the receipt and trusts the verifier's reported observations.
 - For a question requiring the owner, return `status: blocked` and `question` during any phase. The answer is persisted before a new call.
 

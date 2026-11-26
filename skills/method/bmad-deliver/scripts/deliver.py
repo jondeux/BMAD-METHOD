@@ -80,6 +80,25 @@ def write_json(path, value, *, replace=True):
         Path(temporary).unlink(missing_ok=True)
 
 
+def validate_boundaries(authority, kind):
+    if "boundaries" not in authority:
+        return {}
+    boundaries = authority["boundaries"]
+    require(
+        isinstance(boundaries, dict)
+        and boundaries
+        and boundaries.keys() <= {"allowed_output_classes", "allowed_deliverables"},
+        "authority.boundaries must specify allowed_output_classes or allowed_deliverables",
+    )
+    for field, values in boundaries.items():
+        require(text_list(values) and values, f"authority.boundaries.{field} must be a nonempty list of strings")
+    if "allowed_output_classes" in boundaries:
+        classes = boundaries["allowed_output_classes"]
+        require(all(value in NATIVE_ROUTES for value in classes), "invalid allowed output class")
+        require(kind in classes, "request kind is outside the allowed output classes")
+    return boundaries
+
+
 def validate_request(request):
     require(isinstance(request, dict), "request must be an object")
     authority = request.get("authority")
@@ -90,10 +109,15 @@ def validate_request(request):
     require(text(authority.get("outcome")), "authority.outcome is required")
     limits = authority.get("limits", [])
     require(text_list(limits), "authority.limits must be a list of constraints")
-    require(authority["mode"] != "B" or limits, "mode B requires explicit delegation limits")
+    kind = request.get("kind")
+    require(kind in ("code", "non-code", "mixed"), "kind must be code, non-code, or mixed")
+    if authority["mode"] == "B":
+        boundaries = validate_boundaries(authority, kind)
+        require(limits or boundaries, "mode B requires explicit delegation limits")
+        name = authority.get("deliverable")
+        require(name is None or text(name), "authority.deliverable must name a deliverable")
     if authority["mode"] == "C":
         require(text(authority.get("deliverable")), "mode C requires a named deliverable")
-    require(request.get("kind") in ("code", "non-code", "mixed"), "kind must be code, non-code, or mixed")
     require(isinstance(intake, dict), "intake must be an object")
     require(intake.get("kind") in ("idea", "literature", "brainstorm", "forge"), "invalid intake kind")
     require(text(intake.get("text")), "intake.text is required")
@@ -310,8 +334,10 @@ class Delivery:
             except OSError as exc:
                 log.write(f"{exc}\n".encode())
 
-    def propose(self, route, attempt):
+    def propose(self, route, attempt, *, reason=None):
         proposal = {"id": str(attempt), "route": route}
+        if reason:
+            proposal["reason"] = reason
         self.state["proposals"].append(proposal)
         self.state["status"] = "approval-required"
 
@@ -328,7 +354,30 @@ class Delivery:
                 route["workflows"] == NATIVE_ROUTES[self.request["kind"]],
                 "route must preserve the configured native workflow order",
             )
-        return route
+        authority = self.request["authority"]
+        if authority["mode"] != "B":
+            return route, None
+
+        request_kind = self.request["kind"]
+        boundaries = validate_boundaries(authority, request_kind)
+        kind = result.get("kind", request_kind)
+        require(kind in ("code", "non-code", "mixed"), "invalid route output class")
+        classes = boundaries.get("allowed_output_classes")
+        require(classes is None or kind in classes, "route output class is outside the allowed output classes")
+        require(kind == request_kind, "route must preserve the request output class")
+        if classes is not None:
+            incompatible = NATIVE_COMPLETION.keys() - NATIVE_ROUTES[kind]
+            require(
+                incompatible.isdisjoint(route["workflows"]), "route workflows conflict with the request output class"
+            )
+        if "kind" in result:
+            route["kind"] = kind
+        names = boundaries.get("allowed_deliverables")
+        if names is not None:
+            require(route["deliverable"] in names, "route deliverable is outside the allowed deliverables")
+        elif authority.get("limits") and route["deliverable"] != authority.get("deliverable"):
+            return route, "The proposed name needs owner approval under the Mode B delegation limits."
+        return route, None
 
     def adopt_native(self, result, attempt):
         number, workflow = attempt["number"], attempt["workflow"]
@@ -349,21 +398,23 @@ class Delivery:
         elif status == "failed":
             require("workflow" in attempt, "failed receipt is reserved for native workers")
             self.state.update(status="interrupted", error=result["error"])
-        elif status == "replace":
-            route = self.check_route(result)
-            require(
-                route["deliverable"] != self.state["route"]["deliverable"], "replacement must change the deliverable"
-            )
-            if mode == "B":
-                self.state["replacements"].append({"attempt": number, "route": route})
-                self.select(route)
+        elif status == "replace" or phase == "route":
+            route, reason = self.check_route(result)
+            replacing = status == "replace"
+            if replacing:
+                require(
+                    route["deliverable"] != self.state["route"]["deliverable"],
+                    "replacement must change the deliverable",
+                )
+            if (
+                reason
+                or mode == "A"
+                or (mode == "C" and (replacing or route["deliverable"] != self.request["authority"]["deliverable"]))
+            ):
+                self.propose(route, number, reason=reason)
             else:
-                self.propose(route, number)
-        elif phase == "route":
-            route = self.check_route(result)
-            if mode == "A" or (mode == "C" and route["deliverable"] != self.request["authority"]["deliverable"]):
-                self.propose(route, number)
-            else:
+                if replacing:
+                    self.state["replacements"].append({"attempt": number, "route": route})
                 self.select(route)
         elif phase == "build":
             if attempt.get("workflow"):
@@ -448,6 +499,10 @@ class Delivery:
                 self.state["status"] = "ready"
         if args.approve is not None:
             self.state["approvals"].append(proposal["id"])
+            if self.request["authority"]["mode"] == "B" and self.state["phase"] == "build":
+                self.state["replacements"].append(
+                    {"attempt": int(proposal["id"]), "route": proposal["route"], "approval": proposal["id"]}
+                )
             self.select(proposal["route"])
         if args.answer is not None:
             self.state["answers"].append({"question": self.state.pop("question"), "answer": args.answer})

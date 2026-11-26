@@ -38,11 +38,12 @@ PHASE = {
     "route": """Choose the smallest workflow that covers all requested behavior
 and all required steps. If the packet supplies native_workflows, return that
 ordered list exactly; the controller will dispatch it. Select and describe
-the route only. Name the deliverable
-in a short label, without drafting it. For C preserve the exact deliverable.
-For B stay within
-the limits. Return {"status":"ok","deliverable":"...","workflows":["..."],
-"rationale":"...","assumptions":["..."]}. A requires owner approval before build.""",
+the route only. Name the deliverable without drafting it. For C preserve the
+exact deliverable. For B select a name from authority.boundaries.allowed_deliverables
+when present. Otherwise use the exact owner label if supplied and applicable.
+Preserve request.kind and all delegation limits. Return {"status":"ok","deliverable":"...",
+"workflows":["..."],"rationale":"...","assumptions":["..."]}. For B also report
+the route's output class in "kind". A requires owner approval before build.""",
     "build": """Produce the complete deliverable as UTF-8 text artifacts. Use
 the selected workflow and the original behaviors. Provide file contents in the
 receipt so the controller can materialize them. The build phase can return
@@ -51,7 +52,8 @@ snapshot and verification feedback. Return {"status":"ok","artifacts":
 [{"path":"relative/path","content":"full file text"}]}.
 If new evidence warrants replacing the deliverable, return the route fields
 with "status":"replace" and cite the evidence and its relation to the limits in
-"rationale". For B use replacement only when demonstrably within delegation.
+"rationale". For B report the proposed output class in "kind". Respect any
+allowed deliverable names and explain why the replacement fits the prose limits.
 For A and C the owner must approve replacement.""",
     "verify": """Verify the submitted build from a fresh context. If artifacts
 are included in the packet, inspect their contents directly. Otherwise read

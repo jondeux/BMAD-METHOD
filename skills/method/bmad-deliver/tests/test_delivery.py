@@ -47,11 +47,25 @@ def hold():
 
 if phase == "route":
     result = {"status": "ok", **route}
+    if scenario == "unlisted-initial":
+        result["deliverable"] = "Video presentation"
+    if scenario == "different-initial-class":
+        result["kind"] = "code"
+    if scenario == "conflicting-initial-workflow":
+        result["workflows"] = ["bmad-build-auto"]
 elif phase == "build":
     if scenario == "stakeholder" and not job["answers"]:
         result = {"status": "blocked", "question": "Who owns the trial decision?"}
-    elif scenario == "replacement" and job["route"]["deliverable"] == name:
+    elif scenario.startswith("replacement") and job["route"]["deliverable"] == name:
         result = {"status": "replace", **route, "deliverable": "One-page decision memo"}
+        if scenario == "replacement-video":
+            result["deliverable"] = "Video presentation"
+        if scenario == "replacement-class":
+            result["kind"] = "code"
+        if scenario == "replacement-same-class":
+            result["kind"] = request["kind"]
+        if scenario == "replacement-workflow":
+            result["workflows"] = ["custom-workflow", "bmad-build-auto"]
     elif scenario == "invalid-path":
         result = {"status": "ok", "artifacts": [{"path": "../escape", "content": "invalid"}]}
     elif code:
@@ -112,7 +126,7 @@ def workspace(tmp_path, monkeypatch):
     return tmp_path
 
 
-def prepare(workspace, *, kind="non-code", mode="C", scenario="baseline", budget=3):
+def prepare(workspace, *, kind="non-code", mode="C", scenario="baseline", budget=3, authority=None):
     request = workspace / "request.json"
     request.write_text(
         json.dumps(
@@ -124,6 +138,7 @@ def prepare(workspace, *, kind="non-code", mode="C", scenario="baseline", budget
                     "outcome": "Resolve a booking trial question",
                     "deliverable": "Booking prototype" if kind == "code" else "Director decision brief",
                     "limits": ["Keep artifacts local", "Retain the specified booking behavior or study caveat"],
+                    **(authority or {}),
                 },
                 "checks": {
                     "booking" if kind == "code" else "caveat": (
@@ -241,7 +256,14 @@ def test_document_requires_real_approval_and_explicit_retry_without_a_receipt(wo
 @pytest.mark.parametrize("mode", ["A", "B", "C"])
 def test_replacement_preserves_acceptance_and_respects_authority(workspace, mode):
     run = workspace / "run"
-    result = command(*prepare(workspace, mode=mode, scenario="replacement", budget=4), expect=0 if mode == "B" else 2)
+    authority = {}
+    if mode == "B":
+        authority["boundaries"] = {
+            "allowed_output_classes": ["non-code"],
+            "allowed_deliverables": ["Director decision brief", "One-page decision memo"],
+        }
+    args = prepare(workspace, mode=mode, scenario="replacement", budget=4, authority=authority)
+    result = command(*args, expect=0 if mode == "B" else 2)
     if mode == "A":
         result = command("resume", str(run), "--approve", result["proposal"]["id"], expect=2)
     if mode != "B":
@@ -253,6 +275,142 @@ def test_replacement_preserves_acceptance_and_respects_authority(workspace, mode
     assert result["route"]["deliverable"] == "One-page decision memo"
     assert result["verification"][0]["id"] == "caveat"
     assert len(state(run)["replacements"]) == (1 if mode == "B" else 0)
+
+
+@pytest.mark.parametrize(
+    ("scenario", "dispatched", "error"),
+    [
+        ("unlisted-initial", 1, "outside the allowed deliverables"),
+        ("replacement-video", 2, "outside the allowed deliverables"),
+        ("different-initial-class", 1, "outside the allowed output classes"),
+        ("replacement-class", 2, "outside the allowed output classes"),
+        ("conflicting-initial-workflow", 1, "workflows conflict with the request output class"),
+        ("replacement-workflow", 2, "workflows conflict with the request output class"),
+    ],
+)
+def test_mode_b_rejects_conflicting_routes_without_dispatching_them(workspace, scenario, dispatched, error):
+    run = workspace / "run"
+    authority = {
+        "boundaries": {
+            "allowed_output_classes": ["non-code"],
+            "allowed_deliverables": ["Director decision brief", "One-page decision memo"],
+        }
+    }
+    args = prepare(workspace, mode="B", scenario=scenario, budget=5, authority=authority)
+    result = command(*args, expect=2)
+    assert (result["status"], result["dispatched"]) == ("interrupted", dispatched)
+    assert error in result["error"]
+    assert state(run)["proposals"] == state(run)["replacements"] == []
+    assert "no proposal" in command("resume", str(run), "--approve", str(dispatched), expect=1)
+    assert command("resume", str(run), expect=2)["dispatched"] == dispatched
+    assert not (run / "attempts" / str(dispatched + 1)).exists()
+    assert not (run / "artifacts").exists()
+
+
+@pytest.mark.parametrize(
+    ("scenario", "authority", "dispatched", "name"),
+    [
+        ("baseline", {"deliverable": None}, 1, "Director decision brief"),
+        (
+            "replacement-video",
+            {"boundaries": {"allowed_output_classes": ["non-code"]}, "limits": ["Only a local text brief"]},
+            2,
+            "Video presentation",
+        ),
+    ],
+)
+def test_mode_b_saves_one_proposal_for_ambiguous_routes(workspace, scenario, authority, dispatched, name):
+    run = workspace / "run"
+    args = prepare(workspace, mode="B", scenario=scenario, budget=4, authority=authority)
+    pending = command(*args, expect=2)
+    assert (pending["status"], pending["dispatched"]) == ("approval-required", dispatched)
+    proposal = pending["proposal"]
+    assert proposal["route"]["deliverable"] == name
+    assert "Mode B delegation limits" in proposal["reason"]
+    assert command("status", str(run))["proposal"] == proposal
+    assert command("resume", str(run), expect=2) == pending
+    assert state(run)["proposals"] == [proposal]
+    assert not (run / "attempts" / str(dispatched + 1)).exists()
+
+    result = command("resume", str(run), "--approve", proposal["id"])
+    assert (result["status"], result["dispatched"]) == ("complete", dispatched + 2)
+    assert result["route"]["deliverable"] == name
+    assert result["verification"][0]["id"] == "caveat"
+    record = state(run)
+    assert record["approvals"] == [proposal["id"]]
+    if scenario == "baseline":
+        assert record["replacements"] == []
+    else:
+        assert record["replacements"] == [
+            {"attempt": dispatched, "route": proposal["route"], "approval": proposal["id"]}
+        ]
+        assert command("resume", str(run)) == result
+        assert state(run)["replacements"] == record["replacements"]
+
+
+@pytest.mark.parametrize(
+    "boundaries",
+    [
+        {"allowed_output_classes": ["non-code"]},
+        {"allowed_deliverables": ["Director decision brief", "One-page decision memo"]},
+    ],
+)
+def test_mode_b_can_delegate_with_one_allowlist_and_without_prose(workspace, boundaries):
+    authority = {"limits": [], "boundaries": boundaries}
+    args = prepare(workspace, mode="B", scenario="replacement-same-class", budget=4, authority=authority)
+    result = command(*args)
+    assert result["route"]["deliverable"] == "One-page decision memo"
+    assert result["route"]["kind"] == "non-code"
+    assert state(workspace / "run")["proposals"] == []
+
+
+def test_mode_b_cannot_switch_the_run_class_even_when_both_classes_are_allowed(workspace):
+    authority = {"boundaries": {"allowed_output_classes": ["non-code", "code"]}}
+    args = prepare(workspace, mode="B", scenario="replacement-class", budget=4, authority=authority)
+    result = command(*args, expect=2)
+    assert (result["status"], result["dispatched"]) == ("interrupted", 2)
+    assert "route must preserve the request output class" in result["error"]
+
+
+@pytest.mark.parametrize(
+    ("boundaries", "error"),
+    [
+        ({}, "must specify allowed_output_classes or allowed_deliverables"),
+        ({"allowed_deliverables": [], "allowed_output_classes": ["non-code"]}, "must be a nonempty list"),
+        ({"allowed_deliverables": "Director decision brief"}, "must be a nonempty list"),
+        ({"allowed_output_classes": ["slides"]}, "invalid allowed output class"),
+        ({"allowed_output_classes": ["code"]}, "request kind is outside the allowed output classes"),
+        (
+            {"allowed_output_classes": ["non-code"], "allowed_deliverable": ["Director decision brief"]},
+            "must specify allowed_output_classes or allowed_deliverables",
+        ),
+    ],
+)
+def test_mode_b_validates_bounds_before_creating_a_run(workspace, boundaries, error):
+    args = prepare(workspace, mode="B", authority={"boundaries": boundaries})
+    assert error in command(*args, expect=1)
+    assert not (workspace / "run").exists()
+
+
+@pytest.mark.parametrize("name", [" ", 42, ["Director decision brief"]])
+def test_mode_b_rejects_invalid_owner_labels_before_creating_a_run(workspace, name):
+    args = prepare(workspace, mode="B", authority={"deliverable": name})
+    assert "authority.deliverable must name a deliverable" in command(*args, expect=1)
+    assert not (workspace / "run").exists()
+
+
+def test_mode_b_resumes_legacy_selected_route_without_reapproval(workspace):
+    run = workspace / "run"
+    selected = command(*prepare(workspace, mode="B", budget=1), expect=2)
+    assert (selected["status"], selected["phase"]) == ("budget-exhausted", "build")
+    record = state(run)
+    # A version-1 controller could select a prose-only route without an owner label.
+    del record["request"]["authority"]["deliverable"]
+    (run / "state.json").write_text(json.dumps(record))
+    assert command("status", str(run))["route"] == record["route"]
+    result = command("resume", str(run), "--budget", "3")
+    assert (result["status"], result["dispatched"]) == ("complete", 3)
+    assert state(run)["proposals"] == []
 
 
 def test_inapplicable_check_stays_open_until_repaired(workspace):
