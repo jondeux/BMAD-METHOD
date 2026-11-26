@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import subprocess
@@ -11,6 +12,33 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 RUNNER = SCRIPTS / "deliver.py"
 NATIVE_HOST = SCRIPTS / "native_host.py"
 REPO = SCRIPTS.parents[3]
+AVAILABILITY_SQL = (
+    "SELECT NOT EXISTS (SELECT 1 FROM bookings WHERE room_id = :room_id "
+    "AND starts_at < ends_at AND starts_at < :requested_end AND :requested_start < ends_at);\n"
+)
+BRIEF_LIMITATION = "The simulation excluded false releases."
+SQLITE_CHECK = """\
+from pathlib import Path
+import sqlite3
+import sys
+
+query = Path(sys.argv[1]).read_text()
+with sqlite3.connect(":memory:") as db:
+    db.execute("CREATE TABLE bookings(room_id TEXT, starts_at INTEGER, ends_at INTEGER)")
+    db.execute("INSERT INTO bookings VALUES ('A', 600, 660)")
+    db.commit()
+    allowed = (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ)
+    db.set_authorizer(lambda action, *_: sqlite3.SQLITE_OK if action in allowed else sqlite3.SQLITE_DENY)
+    for start, end, expected in [(630, 690, 0), (540, 600, 1), (660, 720, 1)]:
+        actual = db.execute(query, {"room_id": "A", "requested_start": start, "requested_end": end}).fetchone()
+        assert actual == (expected,), (start, end, actual)
+print("SQLite confirmed overlap and adjacent boundaries")
+"""
+TYPED_CHECKS = {
+    "booking": {"kind": "executable", "behavior": "Reject overlap and allow adjacent intervals"},
+    "caveat": {"kind": "source-inspection", "behavior": "State that the simulation excluded false releases"},
+    "decision": {"kind": "judgment", "behavior": "Make the proposed decision easy to find"},
+}
 FIXTURE = r"""
 from pathlib import Path
 import os
@@ -18,14 +46,13 @@ import subprocess
 import sys
 import time
 
-from deliver import read_json, write_json
+from deliver import digest, read_json, write_json
 
 job_file, receipt_file = map(Path, sys.argv[1:])
 job = read_json(job_file)
 request = job["request"]
 phase = job["phase"]
-scenario = request["intake"]["text"]
-check_id, = request["checks"]
+scenario = request["intake"]["text"].splitlines()[0]
 code = request["kind"] == "code"
 name = "Booking prototype" if code else "Director decision brief"
 route = {
@@ -43,6 +70,62 @@ def hold():
             return
         time.sleep(.02)
     raise RuntimeError("test never released worker")
+
+
+def typed_result():
+    artifacts = {item["path"]: item["content"] for item in job["artifacts"]}
+    hashes = {path: digest(content.encode()) for path, content in artifacts.items()}
+    assert job["artifact_sha256"] == hashes
+    rows = []
+    for check_id, check in request["checks"].items():
+        kind = check["kind"]
+        row = {"id": check_id, "kind": kind, "status": "pass"}
+        if kind == "executable":
+            path = Path("availability.sql")
+            path.write_bytes(artifacts[path.name].encode())
+            process = subprocess.run(
+                [sys.executable, "-B", "-c", SQLITE_CHECK, path.name], capture_output=True, text=True
+            )
+            row.update(
+                status="pass" if process.returncode == 0 else "fail",
+                evidence=process.stdout.strip() or process.stderr.strip(),
+                observation={"argv": process.args, "exit_code": process.returncode,
+                             "stdout": process.stdout, "stderr": process.stderr},
+            )
+            if scenario == "evidence-prose":
+                row.pop("observation")
+                row["evidence"] = "OK"
+            if scenario == "evidence-failed-exit":
+                row["observation"]["exit_code"] = 1
+            if scenario == "evidence-repair" and job["attempt"] == 3:
+                row.update(status="fail", evidence="Fixture requests a rebuild.")
+        elif kind == "source-inspection":
+            path, content = next((path, content) for path, content in artifacts.items() if path.endswith(".md"))
+            first, quote = next(
+                (index, line) for index, line in enumerate(content.splitlines(), 1) if "false releases" in line
+            )
+            references = [{"source": "artifact", "path": path, "line_start": first, "quote": quote}]
+            if scenario.startswith("evidence"):
+                references.append({
+                    "source": "intake", "line_start": 2, "line_end": 2, "quote": BRIEF_LIMITATION,
+                })
+            if scenario == "evidence-missing-reference":
+                references[0]["path"] = "../brief.md"
+            if scenario == "evidence-wrong-quote":
+                references[0]["quote"] = "The simulation included false releases."
+            if scenario == "evidence-intake-only":
+                references = references[1:]
+            row.update(evidence="The observed brief preserves the source limitation.", references=references)
+        else:
+            row["evidence"] = "The proposed decision is the first line of the brief."
+        rows.append(row)
+    if scenario == "evidence-stale":
+        hashes["availability.sql"] = "0" * 64
+    verification_id = "previous-verification" if scenario == "evidence-replayed" else job["verification_id"]
+    return {
+        "status": "ok", "verification_version": 2, "verification_id": verification_id,
+        "artifact_sha256": hashes, "checks": rows,
+    }
 
 
 if phase == "route":
@@ -68,6 +151,14 @@ elif phase == "build":
             result["workflows"] = ["custom-workflow", "bmad-build-auto"]
     elif scenario == "invalid-path":
         result = {"status": "ok", "artifacts": [{"path": "../escape", "content": "invalid"}]}
+    elif scenario.startswith("evidence"):
+        sql = AVAILABILITY_SQL
+        if scenario == "evidence-repair" and job["verification"]:
+            sql += "-- Rebuilt from the previous result.\n"
+        result = {"status": "ok", "artifacts": [
+            {"path": "availability.sql", "content": sql},
+            {"path": "brief.md", "content": "Decision: trial manual recovery.\n" + BRIEF_LIMITATION + "\n"},
+        ]}
     elif code:
         result = {"status": "ok", "artifacts": [{
             "path": "booking.py",
@@ -80,7 +171,10 @@ elif phase == "build":
         if scenario != "repair" or repaired:
             content += limitation + "\n"
         result = {"status": "ok", "artifacts": [{"path": "decision/brief.md", "content": content}]}
+elif phase == "verify" and job.get("verification_version") == 2:
+    result = typed_result()
 elif phase == "verify":
+    check_id, = request["checks"]
     artifact = job["artifacts"][-1]
     content = artifact["content"]
     if code:
@@ -118,7 +212,12 @@ if hold_phase == f"{phase}:after":
 @pytest.fixture
 def workspace(tmp_path, monkeypatch):
     worker = tmp_path / "fixture-worker"
-    worker.write_text(f"#!{sys.executable}\n" + FIXTURE.lstrip())
+    worker.write_text(
+        f"#!{sys.executable}\n"
+        f"AVAILABILITY_SQL = {AVAILABILITY_SQL!r}\n"
+        f"BRIEF_LIMITATION = {BRIEF_LIMITATION!r}\n"
+        f"SQLITE_CHECK = {SQLITE_CHECK!r}\n" + FIXTURE.lstrip()
+    )
     worker.chmod(0o700)
     monkeypatch.setenv("PYTHONPATH", str(SCRIPTS))
     monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
@@ -126,8 +225,14 @@ def workspace(tmp_path, monkeypatch):
     return tmp_path
 
 
-def prepare(workspace, *, kind="non-code", mode="C", scenario="baseline", budget=3, authority=None):
+def prepare(workspace, *, kind="non-code", mode="C", scenario="baseline", budget=3, authority=None, checks=None):
     request = workspace / "request.json"
+    if checks is None:
+        checks = (
+            {"booking": "Reject overlap and allow adjacent intervals"}
+            if kind == "code"
+            else {"caveat": "State that the simulation omitted false releases"}
+        )
     request.write_text(
         json.dumps(
             {
@@ -140,13 +245,7 @@ def prepare(workspace, *, kind="non-code", mode="C", scenario="baseline", budget
                     "limits": ["Keep artifacts local", "Retain the specified booking behavior or study caveat"],
                     **(authority or {}),
                 },
-                "checks": {
-                    "booking" if kind == "code" else "caveat": (
-                        "Reject overlap and allow adjacent intervals"
-                        if kind == "code"
-                        else "State that the simulation omitted false releases"
-                    ),
-                },
+                "checks": checks,
                 "budget": budget,
                 "timeout_seconds": 15,
             }
@@ -207,6 +306,8 @@ def test_code_recovers_receipt_without_redispatch_and_enforces_budget(workspace,
 
     result = command("resume", str(run), "--budget", "3")
     assert result["status"] == "complete"
+    assert result["verification_version"] == 1
+    assert result["verification_evidence"] == "legacy-prose"
     assert result["dispatched"] == 3
     assert state(run)["budget_extensions"] == [{"after_dispatch": 2, "total": 3}]
     assert result["verification"][0]["evidence"] == "overlap and adjacency verified"
@@ -413,6 +514,125 @@ def test_mode_b_resumes_legacy_selected_route_without_reapproval(workspace):
     assert state(run)["proposals"] == []
 
 
+def start_typed(workspace, scenario="evidence", *, budget=3, checks=TYPED_CHECKS):
+    return prepare(workspace, kind="mixed", scenario=f"{scenario}\n{BRIEF_LIMITATION}", budget=budget, checks=checks)
+
+
+def test_typed_acceptance_records_sqlite_citations_and_judgment(workspace):
+    run = workspace / "run"
+    result = command(*start_typed(workspace), "--verify-worker", str(workspace / "fixture-worker"))
+    assert result == command("status", str(run))
+    assert result["verification_version"] == 2
+    assert result["verification_artifact_sha256"] == result["artifact_sha256"]
+    assert result["artifact_sha256"] == {
+        str(path.relative_to(run / "artifacts")): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (run / "artifacts").iterdir()
+    }
+    rows = {row["kind"]: row for row in result["verification"]}
+    assert set(rows) == {"executable", "source-inspection", "judgment"}
+    assert all(row["status"] == "pass" for row in rows.values())
+    observation = rows["executable"]["observation"]
+    assert observation["exit_code"] == 0
+    assert "SQLite confirmed overlap" in observation["stdout"]
+    references = rows["source-inspection"]["references"]
+    assert {reference["source"] for reference in references} == {"artifact", "intake"}
+    assert all(reference["quote"] == BRIEF_LIMITATION for reference in references)
+
+
+@pytest.mark.parametrize(
+    ("scenario", "error"),
+    [
+        ("evidence-prose", "needs an observed checker result"),
+        ("evidence-failed-exit", "needs a successful checker exit"),
+        ("evidence-stale", "different artifact digest"),
+        ("evidence-replayed", "receipt belongs to a different verification job"),
+        ("evidence-missing-reference", "reference does not resolve"),
+        ("evidence-wrong-quote", "quote differs from referenced text"),
+        ("evidence-intake-only", "pass is missing a required evidence source"),
+    ],
+)
+def test_typed_acceptance_rejects_unsupported_passes(workspace, scenario, error):
+    run = workspace / "run"
+    result = command(*start_typed(workspace, scenario), "--verify-worker", str(workspace / "fixture-worker"), expect=2)
+    assert (result["status"], result["dispatched"]) == ("interrupted", 3)
+    assert error in result["error"]
+    assert not (run / "artifacts").exists()
+    assert "verification_artifact_sha256" not in result
+
+
+def test_executable_acceptance_requires_explicit_trusted_checker(workspace):
+    assert "executable checks require a trusted --verify-worker" in command(*start_typed(workspace), expect=1)
+    assert not (workspace / "run").exists()
+
+
+def test_source_only_check_can_explicitly_require_intake(workspace):
+    check = {"kind": "source-inspection", "behavior": "Find the intake caveat", "required_sources": ["intake"]}
+    result = command(*start_typed(workspace, "evidence-intake-only", checks={"caveat": check}))
+    assert result["status"] == "complete"
+    assert result["verification"][0]["references"][0]["source"] == "intake"
+
+
+def test_repair_keeps_earlier_verdicts_bound_to_the_first_snapshot(workspace):
+    run = workspace / "run"
+    result = command(
+        *start_typed(workspace, "evidence-repair", budget=5), "--verify-worker", str(workspace / "fixture-worker")
+    )
+    first = json.loads((run / "attempts" / "3" / "job.json").read_text())
+    repair = json.loads((run / "attempts" / "4" / "job.json").read_text())
+    last = json.loads((run / "attempts" / "5" / "job.json").read_text())
+    assert repair["verification"][0]["status"] == "fail"
+    assert repair["verification_artifact_sha256"] == first["artifact_sha256"]
+    assert first["verification_id"] != last["verification_id"]
+    assert first["artifact_sha256"] != last["artifact_sha256"]
+    assert result["verification_artifact_sha256"] == last["artifact_sha256"] == result["artifact_sha256"]
+
+
+@pytest.mark.parametrize(
+    ("checks", "error"),
+    [
+        ({"typed": TYPED_CHECKS["caveat"], "legacy": "A prose check"}, "either legacy strings or objects"),
+        ({"bad": {"kind": "objective", "behavior": "Check the result"}}, "invalid acceptance check kind"),
+        ({"bad": {"kind": "judgment", "behavior": " "}}, "check behavior must be a nonempty string"),
+    ],
+)
+def test_new_requests_validate_the_check_contract(workspace, checks, error):
+    assert error in command(*start_typed(workspace, checks=checks), expect=1)
+    assert not (workspace / "run").exists()
+
+
+def test_verification_refuses_changed_build_from_a_saved_run(workspace):
+    run = workspace / "run"
+    result = command(*start_typed(workspace, budget=2), "--verify-worker", str(workspace / "fixture-worker"), expect=2)
+    assert (result["status"], result["phase"]) == ("budget-exhausted", "verify")
+    receipt = run / "attempts" / "2" / "receipt.json"
+    build = json.loads(receipt.read_text())
+    build["artifacts"][0]["content"] = "SELECT 0;\n"
+    receipt.write_text(json.dumps(build))
+    error = command("resume", str(run), "--budget", "3", expect=1)
+    assert "build artifacts changed before verification" in error
+    assert not (run / "attempts" / "3").exists()
+
+
+def test_publication_recovery_refuses_a_changed_verified_snapshot(workspace):
+    run = workspace / "run"
+    result = command(*start_typed(workspace), "--verify-worker", str(workspace / "fixture-worker"))
+    (run / "artifacts").rename(workspace / "previous-publication")
+    record = state(run)
+    record.update(status="ready", phase="publish")
+    record.pop("artifact_sha256")
+    (run / "state.json").write_text(json.dumps(record))
+    receipt = run / "attempts" / "2" / "receipt.json"
+    original = receipt.read_bytes()
+    build = json.loads(original)
+    build["artifacts"][0]["content"] = "SELECT 0;\n"
+    receipt.write_text(json.dumps(build))
+    error = command("resume", str(run), expect=1)
+    assert "publication artifacts differ from the verified snapshot" in error
+    assert not (run / "artifacts").exists()
+    receipt.write_bytes(original)
+    assert command("resume", str(run)) == result
+
+
 def test_inapplicable_check_stays_open_until_repaired(workspace):
     run = workspace / "run"
     blocked = command(*prepare(workspace, scenario="repair", budget=3), expect=2)
@@ -444,11 +664,11 @@ def test_artifact_paths_cannot_escape_the_run(workspace):
     assert not (workspace / "run" / "attempts" / "escape").exists()
 
 
-@pytest.mark.parametrize("independent_verifier", [False, True])
+@pytest.mark.parametrize(("independent_verifier", "typed"), [(False, False), (True, False), (False, True)])
 def test_codex_adapter_dispatches_and_verifies_snapshot_without_provider_access(
-    workspace, monkeypatch, independent_verifier
+    workspace, monkeypatch, independent_verifier, typed
 ):
-    start = prepare(workspace)
+    start = prepare(workspace, checks={"caveat": TYPED_CHECKS["caveat"]} if typed else None)
     shim = workspace / "codex"
     shim.write_text(
         f"#!{sys.executable}\n"
@@ -464,7 +684,11 @@ assert args[args.index("--model") + 1] == "fixture-model"
 assert args[args.index("-c") + 1] == 'model_reasoning_effort="medium"'
 assert args[-1] == "-"
 packet = json.loads(sys.stdin.read().rsplit("\n\n", 1)[1])
-assert packet["request"]["checks"] == {"caveat": "State that the simulation omitted false releases"}
+typed = packet.get("verification_version") == 2
+if typed:
+    assert packet["request"]["checks"]["caveat"]["kind"] == "source-inspection"
+else:
+    assert packet["request"]["checks"] == {"caveat": "State that the simulation omitted false releases"}
 assert packet["verification_worker"] == ("independent" if os.environ.get("BMAD_TEST_EXTERNAL_VERIFY") else "default")
 phase = packet["phase"]
 if phase == "route":
@@ -479,7 +703,15 @@ elif phase == "verify":
     assert packet["artifacts"] == [{"path": "BRIEF.md", "content": snapshot}]
     observed = snapshot.strip()
     assert observed == "The simulation omitted false releases."
-    result = {"status": "ok", "checks": [{"id": "caveat", "status": "pass", "evidence": observed}]}
+    row = {"id": "caveat", "status": "pass", "evidence": observed}
+    result = {"status": "ok", "checks": [row]}
+    if typed:
+        row.update(kind="source-inspection", references=[
+            {"source": "artifact", "path": "BRIEF.md", "line_start": 1, "quote": observed}
+        ])
+        result.update(
+            verification_version=2, verification_id=packet["verification_id"], artifact_sha256=packet["artifact_sha256"]
+        )
 else:
     raise AssertionError(phase)
 Path(args[args.index("--output-last-message") + 1]).write_text(json.dumps(result))
@@ -498,6 +730,8 @@ Path(args[args.index("--output-last-message") + 1]).write_text(json.dumps(result
     assert result["status"] == "complete"
     assert result["dispatched"] == 3
     assert result["verification"][0]["evidence"] == "The simulation omitted false releases."
+    if typed:
+        assert result["verification_artifact_sha256"] == result["artifact_sha256"]
 
 
 def test_reverify_reuses_build_after_checker_repair(workspace):
@@ -526,9 +760,16 @@ def native_host(action, job, *args, expected=0):
     assert result.returncode == expected, result.stderr
 
 
-def test_native_mixed_replays_code_receipt_without_duplicate_work(workspace):
+@pytest.mark.parametrize("typed", [False, True])
+def test_native_mixed_replays_code_receipt_without_duplicate_work(workspace, typed):
     run = workspace / "run"
-    prepared = prepare(workspace, kind="mixed", mode="A", budget=4)
+    if typed:
+        prepared = prepare(
+            workspace, kind="mixed", mode="A", budget=4, scenario=f"evidence\n{BRIEF_LIMITATION}", checks=TYPED_CHECKS
+        )
+        prepared += ["--verify-worker", str(workspace / "fixture-worker")]
+    else:
+        prepared = prepare(workspace, kind="mixed", mode="A", budget=4)
     route = command(*prepared, "--native-host", expect=2)
     assert route["status"] == "approval-required"
     assert route["native_runs"] == []
@@ -546,8 +787,10 @@ def test_native_mixed_replays_code_receipt_without_duplicate_work(workspace):
     native_host("prepare", code_job, "--bmad-root", str(REPO))
     code_workspace = code_job.parent / "workspace"
     (code_workspace / "plan.md").write_text("---\nstatus: blocked\n---\n## Auto Run Result\n")
-    (code_workspace / "query.sql").write_text("select 1;")
-    args = ("submit", code_job, "--terminal", "plan.md", "--artifact", "query.sql=query.sql")
+    sql_path = "availability.sql" if typed else "query.sql"
+    sql_content = AVAILABILITY_SQL.replace("\n", "\r\n") if typed else "select 1;"
+    (code_workspace / "query.sql").write_bytes(sql_content.encode())
+    args = ("submit", code_job, "--terminal", "plan.md", "--artifact", f"{sql_path}=query.sql")
     native_host(*args, expected=1)
     assert not code_job.with_name("receipt.json").exists()
     (code_workspace / "plan.md").write_text("---\nstatus: built\n---\n## Auto Run Result\n")
@@ -572,10 +815,15 @@ def test_native_mixed_replays_code_receipt_without_duplicate_work(workspace):
             packet = json.loads(brief_job.read_text())
             assert packet["native_workflow"] == "bmad-product-brief"
             assert packet["request"]["checks"] == state(run)["request"]["checks"]
-            assert packet["artifacts"] == [{"path": "query.sql", "content": "select 1;"}]
+            assert packet["artifacts"] == [{"path": sql_path, "content": sql_content}]
             native_host("prepare", brief_job, "--bmad-root", str(REPO))
             document = brief_job.parent / "workspace"
-            (document / "brief.md").write_text("The simulation omitted false releases.")
+            brief_content = (
+                f"Decision: trial manual recovery.\n{BRIEF_LIMITATION}\n"
+                if typed
+                else "The simulation omitted false releases."
+            )
+            (document / "brief.md").write_text(brief_content)
             (document / ".memlog.md").write_text("# Memory")
             (document / "native.json").write_text(
                 json.dumps(
@@ -597,4 +845,9 @@ def test_native_mixed_replays_code_receipt_without_duplicate_work(workspace):
     assert final["status"] == "complete"
     assert final["dispatched"] == 4
     assert [item["workflow"] for item in final["native_runs"]] == ["bmad-build-auto", "bmad-product-brief"]
-    assert {item.name for item in (run / "artifacts").iterdir()} == {"brief.md", "query.sql"}
+    assert {item.name for item in (run / "artifacts").iterdir()} == {"brief.md", sql_path}
+    if typed:
+        assert final["verification_artifact_sha256"] == final["artifact_sha256"]
+        assert final["native_runs"][0]["artifact_sources"] == {sql_path: "workspace/query.sql"}
+        assert final["native_runs"][0]["evidence"]["workspace/query.sql"] == final["artifact_sha256"][sql_path]
+        assert (run / "artifacts" / sql_path).read_bytes() == sql_content.encode()

@@ -12,7 +12,16 @@ import sys
 import time
 from pathlib import Path
 
-from deliver import BUILD_AUTO, MAX_JSON_BYTES, NATIVE_COMPLETION, read_json, require, validate_artifacts, write_json
+from deliver import (
+    BUILD_AUTO,
+    MAX_JSON_BYTES,
+    NATIVE_COMPLETION,
+    VERIFICATION_VERSION,
+    read_json,
+    require,
+    validate_artifacts,
+    write_json,
+)
 
 BUNDLED_NATIVE = Path(__file__).resolve().parents[1] / "assets/native"
 SETUP_SCRIPTS = ("config_utils.py", "memlog.py", "render_skill.py", "resolve_config.py", "resolve_customization.py")
@@ -90,11 +99,16 @@ def submit(job_path, terminal_name, artifact_specs, evidence_names):
     status, evidence = terminal_evidence(workflow, workspace, terminal)
     artifacts = []
     adopted_paths = []
+    versioned = job.get("verification_version") == VERIFICATION_VERSION
     for spec in artifact_specs:
         published, separator, source = spec.partition("=")
         require(separator and published and source, "--artifact requires PUBLISHED_PATH=WORKSPACE_PATH")
         path = workspace_file(workspace, source)
-        artifacts.append({"path": published, "content": path.read_text(encoding="utf-8")})
+        if versioned:
+            content = path.read_bytes().decode("utf-8")
+        else:
+            content = path.read_text(encoding="utf-8")
+        artifacts.append({"path": published, "content": content})
         evidence.append(path)
         adopted_paths.append(path)
     if workflow != BUILD_AUTO:
@@ -107,6 +121,11 @@ def submit(job_path, terminal_name, artifact_specs, evidence_names):
         "artifacts": artifacts,
         "native": {"workflow": workflow, "status": status, "evidence": files},
     }
+    if versioned:
+        receipt["native"]["artifact_sources"] = {
+            artifact["path"]: path.relative_to(job_path.parent).as_posix()
+            for artifact, path in zip(artifacts, adopted_paths, strict=True)
+        }
     write_json(job_path.with_name("receipt.json"), receipt, replace=False)
 
 

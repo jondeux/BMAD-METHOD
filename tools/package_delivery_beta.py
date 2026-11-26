@@ -101,9 +101,9 @@ State that the simulation omitted false releases and name the facilities directo
 as the proposed decision owner. Verify both statements. Keep the brief local.
 ```
 
-**Supported code.** Expect Build Auto to produce a local Python file. Make sure the
-verification worker can execute Python before starting. If needed, configure an
-[independent checker](bmad-deliver/references/run-record.md#start-inspect-and-resume).
+**Supported code.** Expect Build Auto to produce a local Python file. Configure a
+[trusted local checker](bmad-deliver/references/run-record.md#acceptance-checks) that
+can execute the Python checks before starting.
 
 ```text
 $bmad-deliver Mode C. Write a local capacity.py that defines remaining(capacity, booked)

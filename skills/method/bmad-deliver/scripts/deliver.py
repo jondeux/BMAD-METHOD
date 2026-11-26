@@ -18,8 +18,12 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from uuid import uuid4
 
 MAX_JSON_BYTES = 4 * 1024 * 1024
+VERIFICATION_VERSION = 2
+CHECK_KINDS = ("executable", "source-inspection", "judgment")
+REFERENCE_SOURCES = ("artifact", "intake")
 BUILD_AUTO = "bmad-build-auto"
 PRODUCT_BRIEF = "bmad-product-brief"
 NATIVE_ROUTES = {"code": [BUILD_AUTO], "non-code": [PRODUCT_BRIEF], "mixed": [BUILD_AUTO, PRODUCT_BRIEF]}
@@ -99,6 +103,30 @@ def validate_boundaries(authority, kind):
     return boundaries
 
 
+def validate_checks(checks):
+    require(isinstance(checks, dict) and checks, "at least one acceptance check is required")
+    require(all(map(text, checks)), "check IDs must be nonempty strings")
+    if all(map(text, checks.values())):
+        return
+    for check in checks.values():
+        require(
+            isinstance(check, dict) and {"kind", "behavior"} <= check.keys(),
+            "checks must use either legacy strings or objects with kind and behavior",
+        )
+        kind = check["kind"]
+        require(kind in CHECK_KINDS, "invalid acceptance check kind")
+        require(text(check["behavior"]), "check behavior must be a nonempty string")
+        fields = {"kind", "behavior"}
+        if kind == "source-inspection":
+            fields.add("required_sources")
+            sources = check.get("required_sources", ["artifact"])
+            require(
+                text_list(sources) and sources and all(source in REFERENCE_SOURCES for source in sources),
+                "required_sources must list artifact, intake, or both",
+            )
+        require(check.keys() <= fields, "unexpected field in acceptance check")
+
+
 def validate_request(request):
     require(isinstance(request, dict), "request must be an object")
     authority = request.get("authority")
@@ -121,8 +149,7 @@ def validate_request(request):
     require(isinstance(intake, dict), "intake must be an object")
     require(intake.get("kind") in ("idea", "literature", "brainstorm", "forge"), "invalid intake kind")
     require(text(intake.get("text")), "intake.text is required")
-    require(isinstance(checks, dict) and checks, "at least one acceptance check is required")
-    require(all(text(key) and text(value) for key, value in checks.items()), "checks must map IDs to behaviors")
+    validate_checks(checks)
     require(positive_int(request.get("budget")), "budget must be a positive number of worker calls")
     timeout = request.get("timeout_seconds", 600)
     require(positive_int(timeout), "timeout_seconds must be positive")
@@ -187,6 +214,79 @@ def digest(content):
     return hashlib.sha256(content).hexdigest()
 
 
+def artifact_hashes(artifacts):
+    return {item["path"]: digest(item["content"].encode()) for item in artifacts}
+
+
+def validate_observation(observation, *, passing):
+    require(isinstance(observation, dict), "executable check needs an observed checker result")
+    argv = observation.get("argv")
+    require(
+        isinstance(argv, list)
+        and argv
+        and text(argv[0])
+        and all(isinstance(arg, str) and "\0" not in arg for arg in argv),
+        "checker observation needs the executed argument vector",
+    )
+    exit_code = observation.get("exit_code")
+    require(type(exit_code) is int, "checker observation needs an integer exit code")
+    require(not passing or exit_code == 0, "passing executable check needs a successful checker exit")
+    require(
+        all(isinstance(observation.get(stream), str) for stream in ("stdout", "stderr")),
+        "checker observation needs captured stdout and stderr",
+    )
+
+
+def validate_references(references, sources, required):
+    require(isinstance(references, list) and references, "source-inspection check needs a source or artifact reference")
+    observed_sources = set()
+    for reference in references:
+        require(isinstance(reference, dict), "invalid evidence reference")
+        source, path = reference.get("source"), reference.get("path")
+        require(
+            (source == "intake" and path is None) or (source == "artifact" and text(path) and path in sources),
+            "evidence reference does not resolve to intake or an artifact",
+        )
+        lines = sources[path]
+        first = reference.get("line_start")
+        last = reference.get("line_end", first)
+        require(
+            positive_int(first) and positive_int(last) and first <= last <= len(lines),
+            "evidence reference line range is outside the referenced text",
+        )
+        quote = reference.get("quote")
+        require(
+            text(quote) and quote == "\n".join(lines[first - 1 : last]), "evidence quote differs from referenced text"
+        )
+        observed_sources.add(source)
+    require(set(required) <= observed_sources, "source-inspection pass is missing a required evidence source")
+
+
+def validate_verification(result, request, artifacts, attempt):
+    version = result.get("verification_version")
+    require(type(version) is int and version == VERIFICATION_VERSION, "invalid verification receipt version")
+    require(
+        result.get("verification_id") == attempt["verification_id"], "receipt belongs to a different verification job"
+    )
+    expected_hashes = attempt["artifact_sha256"]
+    require(result.get("artifact_sha256") == expected_hashes, "verification receipt has a different artifact digest")
+    validate_artifacts(artifacts)
+    require(artifact_hashes(artifacts) == expected_hashes, "build artifacts changed after verification dispatch")
+    sources = {item["path"]: item["content"].splitlines() for item in artifacts}
+    sources[None] = request["intake"]["text"].splitlines()
+    for row in result["checks"]:
+        check = request["checks"][row["id"]]
+        kind = check["kind"]
+        require(row.get("kind") == kind, f"evidence kind differs from acceptance check {row['id']}")
+        passing = row["status"] == "pass"
+        if kind == "executable" and (passing or "observation" in row):
+            require("verifier" in attempt, "executable observations require a trusted --verify-worker")
+            validate_observation(row.get("observation"), passing=passing)
+        elif kind == "source-inspection" and (passing or "references" in row):
+            required = check.get("required_sources", ["artifact"]) if passing else []
+            validate_references(row.get("references"), sources, required)
+
+
 def validate_native_result(result, workflow, attempt_dir):
     native = result.get("native")
     require(isinstance(native, dict) and native.get("workflow") == workflow, "native workflow receipt required")
@@ -211,10 +311,14 @@ def validate_native_result(result, workflow, attempt_dir):
     return native
 
 
-def publish(run, artifacts):
+def publish(run, artifacts, *, expected_hashes=None):
     """Publish the verified tree once, including recovery after rename."""
     output = run / "artifacts"
-    hashes = {item["path"]: digest(item["content"].encode()) for item in artifacts}
+    if expected_hashes is not None:
+        validate_artifacts(artifacts)
+    hashes = artifact_hashes(artifacts)
+    if expected_hashes is not None:
+        require(hashes == expected_hashes, "publication artifacts differ from the verified snapshot")
     if not output.exists():
         stage = Path(tempfile.mkdtemp(dir=run, prefix=".artifacts-"))
         try:
@@ -257,6 +361,10 @@ class Delivery:
     def request(self):
         return self.state["request"]
 
+    @property
+    def versioned_checks(self):
+        return self.state["version"] == VERIFICATION_VERSION
+
     def save(self):
         write_json(self.run / "state.json", self.state)
 
@@ -264,14 +372,21 @@ class Delivery:
         return self.run / "attempts" / str(attempt) / "receipt.json"
 
     def build_outputs(self, attempts):
-        return [artifact for num in attempts for artifact in read_json(self.receipt(num))["artifacts"]]
+        outputs = []
+        for num in attempts:
+            artifacts = read_json(self.receipt(num))["artifacts"]
+            require(isinstance(artifacts, list), "saved build receipt has invalid artifacts")
+            outputs.extend(artifacts)
+        return outputs
+
+    def build_attempts(self):
+        if self.state.get("native_worker"):
+            return self.state["native_partial"] or self.state["native_build_attempts"]
+        attempt = self.state.get("build_attempt")
+        return [attempt] if attempt else []
 
     def artifacts(self):
-        if self.state.get("native_worker"):
-            attempts = self.state["native_partial"] or self.state["native_build_attempts"]
-            return self.build_outputs(attempts)
-        attempt = self.state.get("build_attempt")
-        return self.build_outputs([attempt]) if attempt else []
+        return self.build_outputs(self.build_attempts())
 
     def job(self, num):
         phase = self.state["phase"]
@@ -287,6 +402,18 @@ class Delivery:
             "budget_remaining_after_dispatch": self.state["budget"] - num,
             "timeout_seconds": self.request.get("timeout_seconds", 600),
         }
+        if self.versioned_checks:
+            job["verification_version"] = VERIFICATION_VERSION
+            if "verification_artifact_sha256" in self.state:
+                job["verification_artifact_sha256"] = self.state["verification_artifact_sha256"]
+            if phase == "verify":
+                validate_artifacts(job["artifacts"])
+                expected = {}
+                for number in self.build_attempts():
+                    expected.update(self.state["attempts"][number - 1]["artifact_sha256"])
+                require(artifact_hashes(job["artifacts"]) == expected, "build artifacts changed before verification")
+                job["artifact_sha256"] = expected
+                job["verification_id"] = uuid4().hex
         if self.state.get("native_worker"):
             workflows = NATIVE_ROUTES[self.request["kind"]]
             job["native_workflows"] = workflows
@@ -308,6 +435,8 @@ class Delivery:
         workflow = job.get("native_workflow")
         worker = self.state["native_worker"] if workflow else verifier or self.state["worker"]
         attempt = {"number": num, "phase": job["phase"], "status": "dispatched"}
+        if "verification_id" in job:
+            attempt.update(verification_id=job["verification_id"], artifact_sha256=job["artifact_sha256"])
         if workflow:
             attempt["workflow"] = workflow
         if verifier:
@@ -343,6 +472,7 @@ class Delivery:
 
     def select(self, route):
         self.state.update(phase="build", status="ready", route=route, verification=[])
+        self.state.pop("verification_artifact_sha256", None)
         self.state.pop("build_attempt", None)
         if self.state.get("native_worker"):
             self.state.update(native_partial=[], native_build_attempts=[])
@@ -384,6 +514,20 @@ class Delivery:
         native = validate_native_result(result, workflow, self.receipt(number).parent)
         partial = [*self.state["native_partial"], number]
         validate_artifacts(self.build_outputs(partial))
+        if self.versioned_checks:
+            hashes = artifact_hashes(result["artifacts"])
+            sources = native.get("artifact_sources")
+            require(
+                isinstance(sources, dict) and sources.keys() == hashes.keys(),
+                "native evidence must identify the source of every published artifact",
+            )
+            require(
+                all(
+                    text(sources[path]) and native["evidence"].get(sources[path]) == sha for path, sha in hashes.items()
+                ),
+                "native artifact bytes differ from their evidence files",
+            )
+            attempt["artifact_sha256"] = hashes
         attempt["native"] = native
         self.state.update(native_partial=partial, status="ready")
         if len(partial) == len(NATIVE_ROUTES[self.request["kind"]]):
@@ -420,9 +564,14 @@ class Delivery:
             if attempt.get("workflow"):
                 self.adopt_native(result, attempt)
             else:
+                if self.versioned_checks:
+                    attempt["artifact_sha256"] = artifact_hashes(result["artifacts"])
                 self.state.update(phase="verify", status="ready", build_attempt=number)
         else:
             rows = result["checks"]
+            if self.versioned_checks:
+                validate_verification(result, self.request, self.artifacts(), attempt)
+                self.state["verification_artifact_sha256"] = attempt["artifact_sha256"]
             self.state["verification"] = rows
             if all(row["status"] == "pass" for row in rows):
                 self.state.update(phase="publish", status="ready")
@@ -453,7 +602,9 @@ class Delivery:
             self.recover()
         while self.state["status"] == "ready":
             if self.state["phase"] == "publish":
-                self.state.update(status="complete", artifact_sha256=publish(self.run, self.artifacts()))
+                expected = self.state["verification_artifact_sha256"] if self.versioned_checks else None
+                hashes = publish(self.run, self.artifacts(), expected_hashes=expected)
+                self.state.update(status="complete", artifact_sha256=hashes)
                 self.save()
                 return
             if len(self.state["attempts"]) == self.state["budget"]:
@@ -517,9 +668,25 @@ class Delivery:
 
     def summary(self):
         state = self.state
-        keys = ("status", "phase", "route", "question", "verification", "artifact_sha256", "error")
+        keys = (
+            "status",
+            "phase",
+            "route",
+            "question",
+            "verification",
+            "verification_artifact_sha256",
+            "artifact_sha256",
+            "error",
+        )
         summary = {key: state[key] for key in keys if key in state}
-        summary.update(run=str(self.run), dispatched=len(state["attempts"]), budget=state["budget"])
+        summary.update(
+            run=str(self.run),
+            dispatched=len(state["attempts"]),
+            budget=state["budget"],
+            verification_version=state["version"],
+        )
+        if not self.versioned_checks:
+            summary["verification_evidence"] = "legacy-prose"
         if state.get("native_worker"):
             summary["native_runs"] = [
                 {"attempt": item["number"], **item["native"]} for item in state["attempts"] if "native" in item
@@ -570,6 +737,9 @@ def trusted_executable(path, flag):
 
 def initial_state(args):
     request = validate_request(read_json(args.request, limit=512 * 1024))
+    versioned = isinstance(next(iter(request["checks"].values())), dict)
+    if versioned and any(check["kind"] == "executable" for check in request["checks"].values()):
+        require(args.verify_worker, "executable checks require a trusted --verify-worker")
     if args.worker:
         require(args.model is None and args.effort is None, "--model and --effort require --codex")
         worker = trusted_executable(args.worker, "--worker")
@@ -586,7 +756,7 @@ def initial_state(args):
     elif args.native_worker:
         native_worker = trusted_executable(args.native_worker, "--native-worker")
     return {
-        "version": 1,
+        "version": VERIFICATION_VERSION if versioned else 1,
         "request": request,
         "worker": worker,
         "native_worker": native_worker,
@@ -621,7 +791,7 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             if args.command != "start":
                 state = read_json(run / "state.json", limit=32 * 1024 * 1024)
-                require(state.get("version") == 1, "unsupported run state version")
+                require(state.get("version") in (1, VERIFICATION_VERSION), "unsupported run state version")
             delivery = Delivery(run, state, lock.fileno())
             if args.command == "start":
                 delivery.save()

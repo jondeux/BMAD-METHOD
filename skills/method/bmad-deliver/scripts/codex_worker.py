@@ -9,7 +9,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-from deliver import MAX_JSON_BYTES, read_json, validate_artifacts, validate_receipt, write_json
+from deliver import (
+    MAX_JSON_BYTES,
+    VERIFICATION_VERSION,
+    artifact_hashes,
+    read_json,
+    require,
+    validate_artifacts,
+    validate_receipt,
+    write_json,
+)
 
 INLINE_SNAPSHOT_BYTES = 16 * 1024
 
@@ -67,14 +76,31 @@ command and observed outcome. Report execution failures as failures and explain
 any inapplicability. Do not edit files or propose fixes in place of a check result.""",
 }
 
+VERSIONED_VERIFY = """Verify the submitted artifact snapshot against every
+check's behavior. Inspect the supplied artifact contents or the files in
+snapshot/. Return one JSON object with status "ok", verification_version 2,
+the packet's verification_id and complete artifact_sha256 map, and a checks array. Each row has
+the original id, declared kind, status ("pass", "fail", or "inapplicable"),
+and a description in evidence. For a source-inspection pass add a references
+array. Each reference has source "intake" for request.intake.text, or
+source "artifact" and an exact artifact path. Include a one-based line_start,
+optional inclusive line_end, and a verbatim quote of those lines joined with
+newlines. Cite an artifact by default, or use each source type listed in the
+check's required_sources. For judgment, explain the criteria applied and the observed result.
+Report missing evidence as fail or inapplicable. Executable checks use a
+separately configured checker. Do not edit artifacts."""
+
 
 def main():
     codex, model, effort, job_file, receipt_file = sys.argv[1:]
     job = read_json(Path(job_file), limit=MAX_JSON_BYTES * 2)
     phase = job["phase"]
     artifacts = job.pop("artifacts")
-    if artifacts:
+    versioned_verify = phase == "verify" and job.get("verification_version") == VERIFICATION_VERSION
+    if artifacts or versioned_verify:
         validate_artifacts(artifacts)
+        if versioned_verify:
+            require(artifact_hashes(artifacts) == job["artifact_sha256"], "verification job artifact hash mismatch")
         if len(json.dumps(artifacts, ensure_ascii=False).encode()) <= INLINE_SNAPSHOT_BYTES:
             job["artifacts"] = artifacts
         snapshot = Path("snapshot")
@@ -101,7 +127,10 @@ def main():
         cmd.extend(["--model", model])
     if effort:
         cmd.extend(["-c", f'model_reasoning_effort="{effort}"'])
-    prompt = f"{CONTRACT}\n\n{PHASE[phase]}\n\n{json.dumps(job, ensure_ascii=False)}"
+    instructions = PHASE[phase]
+    if versioned_verify:
+        instructions = VERSIONED_VERIFY
+    prompt = f"{CONTRACT}\n\n{instructions}\n\n{json.dumps(job, ensure_ascii=False)}"
     subprocess.run([*cmd, "-"], input=prompt, text=True, check=True, timeout=job["timeout_seconds"])
     raw = response.read_text(encoding="utf-8").strip()
     if raw.startswith("```json\n") and raw.endswith("\n```"):

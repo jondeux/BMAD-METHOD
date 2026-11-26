@@ -33,7 +33,7 @@ python3 "$delivery" resume _bmad-output/check-in-run &
 
 Choose `--codex` or `--worker /path/to/trusted-executable` to supply a worker, including when using native builds. `--codex` requires the `codex` executable on `PATH` and a configured provider. It opens a fresh read-only session for each stage it handles. Use source material authorized for that provider. Add `--model` or `--effort` when supported by the provider.
 
-The controller dispatches verification after the native builds. For executable checks, ensure the verifier can run the required commands. Use `--verify-worker /path/to/trusted-checker` to delegate verification to an independent local checker with access to the required runtime. It receives the job and receipt paths, checks the generated files, and consumes one dispatch.
+The controller dispatches verification after the native builds. Use `--verify-worker /path/to/trusted-checker` for typed executable checks. The trusted local checker receives the job and receipt paths, exercises the artifact snapshot with the required runtime, and consumes one dispatch.
 
 ## Request
 
@@ -51,8 +51,14 @@ The controller dispatches verification after the native builds. For executable c
     "limits": ["Local draft only", "Preserve the study limitation"]
   },
   "checks": {
-    "limitation": "The brief says the simulation omitted false releases",
-    "decision": "The brief records a proposed decision and identifies its owner"
+    "limitation": {
+      "kind": "source-inspection",
+      "behavior": "The brief says the simulation omitted false releases"
+    },
+    "decision": {
+      "kind": "source-inspection",
+      "behavior": "The brief records a proposed decision and identifies its owner"
+    }
   },
   "budget": 5,
   "timeout_seconds": 600
@@ -60,6 +66,18 @@ The controller dispatches verification after the native builds. For executable c
 ```
 
 Use `code`, `non-code`, or `mixed`. The intake kinds are `idea`, `literature`, `brainstorm`, and `forge`. Set a positive worker-call budget and provide at least one acceptance check. The original checks are mandatory. Use stable IDs. For B supply explicit delegation limits. For C supply the named deliverable. For A request a specific proposal and approve it before building. When acceptance or authority requires information from a real stakeholder, the run waits for the owner.
+
+### Acceptance checks
+
+Use a `kind` and a `behavior` for each acceptance check in a new request.
+
+| Kind | Evidence for a pass |
+| --- | --- |
+| `executable` | The trusted checker reports the command it ran, a successful exit, and captured output from exercising the artifact. |
+| `source-inspection` | The verifier explains the observation and cites an exact line range in the artifact snapshot. For checks that need the original source text, include it in the intake and set `required_sources` to `["intake"]` or `["artifact", "intake"]` as appropriate. |
+| `judgment` | The verifier explains the criteria applied and its assessment. The result is labeled as judgment. |
+
+Typed checks use version 2. Every verdict is tied to the SHA-256 map of the files sent to verification. A request whose checks are all strings still uses version 1, with the earlier prose receipt format. `status` labels version-1 verification as `legacy-prose`. Existing runs keep their version and their original checks. Use the current controller to resume a version-2 run.
 
 ### Mode B delegation
 
@@ -91,7 +109,7 @@ An allowlisted deliverable can proceed automatically. Without a name allowlist, 
 | `budget-exhausted` | Use `resume --budget NEW_TOTAL` after the owner extends the cap. |
 | `complete` | Read the files under `artifacts/` and the verification results from `status`. |
 
-A bare resume reuses committed receipts and advances stages with available budget. If the run stopped at the cap after an independent checker returned a failed result and you repaired that checker, use `resume --reverify --budget NEW_TOTAL` to test the same build again. The earlier attempt remains in the run record. Every dispatch consumes one unit, including verification, failed attempts, and retries. A native run needs three dispatches for code or documents, or four for mixed delivery, when every stage succeeds on its first attempt. The runner enforces the call cap before dispatch and a per-call timeout. Billed tokens are provider usage. The call cap is independent of token count. An executable check records the observed result. Verification failure or inapplicability leaves the check open. The controller allocates a repair attempt if budget remains. It publishes only when every check passes.
+A bare resume reuses committed receipts and advances stages with available budget. If the run stopped at the cap after an independent checker returned a failed result and you repaired that checker, use `resume --reverify --budget NEW_TOTAL` to test the same build again. The earlier attempt remains in the run record. Every dispatch consumes one unit, including verification, failed attempts, and retries. A native run needs three dispatches for code or documents, or four for mixed delivery, when every stage succeeds on its first attempt. The runner enforces the call cap before dispatch and a per-call timeout. Billed tokens are provider usage. The call cap is independent of token count. Verification failure or inapplicability leaves the check open. The controller allocates a repair attempt if budget remains. It publishes only when every check passes and, in version 2, the files match the verified hashes.
 
 ## Persisted record and worker interface
 
@@ -108,6 +126,8 @@ The job has these fields at every phase:
 | `answers` | Owner responses as objects with `question` and `answer`. |
 | `artifacts`, `verification` | The latest build's array of `path` and `content` objects, and the most recent verification results. Both start empty. Custom workers use the array to construct their own snapshot. The Codex adapter writes it to `snapshot/` and includes small snapshots in the prompt for direct inspection. |
 | `verification_worker` | `independent` when an explicit checker is attached, else `default`. |
+| `verification_version`, `verification_id`, `artifact_sha256` | Typed jobs carry version `2`. A verify job also carries a unique ID and the complete path-to-SHA-256 map for its artifact snapshot. |
+| `verification_artifact_sha256` | When present, identifies the earlier snapshot covered by the accompanying `verification` feedback. |
 | `native_workflows`, `native_workflow` | With native dispatch enabled, the ordered workflows for this run and the assigned workflow for a build job. |
 | `budget_remaining_after_dispatch`, `timeout_seconds` | Unused calls after the current dispatch, and the time limit for this call. |
 
@@ -115,8 +135,14 @@ Return one of the following receipts:
 
 - For `route`, return `status: ok`, a `deliverable`, `workflows` array, `rationale`, and `assumptions` array. In Mode B, the route can also declare its output class in `kind`. An assumption must be reversible. Cite why a workflow is needed.
 - For `build`, return `status: ok` and `artifacts`, each with relative `path` and full `content`. On repair the job contains the prior snapshot and verification. To propose replacement use `status: replace` and the route fields with new evidence in the rationale. In Mode B, a replacement can also declare its output class in `kind`.
-- For `verify`, return `status: ok` and `checks`, with `id`, `status` (pass, fail or inapplicable) and observed `evidence` for every original ID. The verifier executes or inspects the snapshot. The runner validates the receipt and trusts the verifier's reported observations.
+- For `verify`, return `status: ok` and `checks`, with `id`, `status` (pass, fail or inapplicable) and explanatory `evidence` for every original ID. For typed checks also include `verification_version: 2`, the job's `verification_id`, and the exact `artifact_sha256` map at the receipt root. Include the check's declared `kind` in every row. Verify the hashes of the actual snapshot before testing or inspecting it.
 - For a question requiring the owner, return `status: blocked` and `question` during any phase. The answer is persisted before a new call.
+
+For a typed executable pass the local checker must record an `observation` object in the check row. It contains the observed argument vector in `argv`, the integer `exit_code`, and captured strings `stdout` and `stderr`. Use empty strings for quiet streams. Keep relevant excerpts when full output would exceed the 4 MiB receipt limit. The checker should exit successfully on the expected behavior, including when it tests an expected failure. The controller treats the owner-configured checker as the source of execution observations.
+
+For a typed source-inspection pass, add a nonempty `references` array to the row. Each reference uses `source: intake` for the original intake text or `source: artifact` with the exact artifact `path`. Specify the one-based `line_start`, optional inclusive `line_end`, and the verbatim `quote` with lines joined by LF. The controller resolves the range and matches the quote exactly. The verifier explains how the cited text supports the behavior. A failed or inapplicable check may omit its observation or references. A judgment row carries its evidence explanation and kind.
+
+The status summary's `verification_artifact_sha256` identifies the snapshot for the latest typed verification rows. At completion it matches `artifact_sha256`, the manifest recorded at publication. Use that manifest to check any files edited after publication.
 
 Exit status 0 indicates completion or a successful status query. Status 2 indicates a run stopped at a gate. Status 1 indicates an invocation, storage or locking error. Only use this prototype for run-local artifacts. Installation, deployment, and integration with an existing worktree are separate actions.
 
