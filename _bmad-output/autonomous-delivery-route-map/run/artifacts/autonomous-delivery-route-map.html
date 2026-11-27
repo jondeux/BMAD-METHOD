@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autonomous Delivery · Route Map</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    color-scheme: light;
+    --paper: #f8f6ef;
+    --ink: #182b35;
+    --muted: #455963;
+    --rule: #b6c2bb;
+    --card: #fffefa;
+    --teal: #086253;
+    --teal-pale: #e2f1e9;
+    --amber: #76420f;
+    --amber-pale: #f9ecd5;
+    --blue: #183e63;
+    --blue-pale: #e5edf4;
+    font: 100%/1.55 system-ui, sans-serif;
+    scroll-behavior: smooth;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; color: var(--ink); background: var(--paper); }
+  h1, h2, h3, p { margin: 0; }
+  h1, h2 { font-family: Georgia, serif; font-weight: 600; line-height: 1.08; letter-spacing: -.035em; }
+  h1 { font-size: clamp(2.6rem, 5.4vw, 4.9rem); max-width: 16ch; }
+  h2 { font-size: clamp(1.95rem, 3.6vw, 3rem); }
+  h3 { font-size: 1.05rem; line-height: 1.3; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .92em; }
+  code { overflow-wrap: anywhere; }
+  a { color: var(--teal); text-underline-offset: .18em; }
+  a:hover { text-decoration-thickness: .14em; }
+  :focus-visible { outline: 3px solid #a54b24; outline-offset: 4px; }
+  .wrap { width: min(1140px, 100% - 3rem); margin-inline: auto; }
+  .top { border-bottom: 1px solid var(--rule); }
+  .top .wrap { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .65rem 1.75rem; padding-block: .9rem; }
+  .identity { font-weight: 750; }
+  .identity small { font-weight: 500; color: var(--muted); white-space: nowrap; }
+  nav { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; }
+  nav a { font-size: .87rem; font-weight: 650; }
+  .hero { padding: clamp(2.1rem, 5vw, 4rem) 0 1.65rem; }
+  .hero > p { margin-top: .9rem; max-width: 63ch; font-size: clamp(1rem, 2vw, 1.17rem); color: var(--muted); }
+  .flow { list-style: none; display: flex; align-items: stretch; gap: 1.55rem; margin: 0; padding: 0; }
+  .flow > li { flex: 1; position: relative; min-width: 0; }
+  .flow > li + li::before { position: absolute; left: -1.35rem; top: calc(50% - .85rem); color: var(--teal); content: "→"; font-weight: 800; }
+  .node { display: block; height: 100%; padding: .8rem .85rem; border: 1px solid var(--rule); border-radius: .55rem; background: var(--card); }
+  span.node { font-size: .9rem; }
+  .node strong { display: block; margin-bottom: .22rem; line-height: 1.25; }
+  .node small { display: block; color: var(--muted); line-height: 1.4; }
+  .owner { background: var(--amber-pale); border-color: #c19458; }
+  .worker { background: var(--blue-pale); border-color: #90a8bc; }
+  .output { background: var(--teal-pale); border-color: #80a997; }
+  main > section { padding: clamp(1.65rem, 4vw, 2.8rem) 0; border-bottom: 1px solid var(--rule); scroll-margin-top: 1rem; }
+  .section-head { display: grid; gap: .55rem; margin-bottom: 1.15rem; }
+  .section-head p { max-width: 73ch; color: var(--muted); }
+  .panel { background: var(--card); border: 1px solid var(--rule); border-radius: .75rem; padding: clamp(.85rem, 2vw, 1.3rem); }
+  .explorer { margin-top: 1.6rem; }
+  .explorer h2 { font-size: clamp(1.55rem, 2.5vw, 2.1rem); }
+  .controls { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .65rem; margin: .9rem 0 1.15rem; }
+  label { display: grid; gap: .3rem; font-size: .84rem; font-weight: 750; }
+  select { background: var(--paper); color: var(--ink); font: inherit; font-weight: 550; min-width: 0; width: 100%; padding: .5rem .24rem .5rem .45rem; min-height: 2.6rem; border: 1px solid #8d9d96; border-radius: .33rem; }
+  .preview-result { margin-top: .75rem; color: var(--muted); font-size: .91rem; }
+  .preview-result strong { color: var(--ink); }
+  .lanes { display: grid; gap: .6rem; }
+  .lane { display: grid; grid-template-columns: minmax(8rem, .85fr) minmax(0, 3fr); gap: .65rem; align-items: stretch; border: 1px solid var(--rule); border-radius: .55rem; background: var(--card); padding: .65rem; }
+  .lane > strong { padding: .45rem; align-self: center; }
+  .lane[data-selected="true"] { border-color: var(--teal); box-shadow: inset 4px 0 var(--teal); }
+  .lane .node { padding: .5rem .6rem; }
+  .columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; }
+  .columns article > p { color: var(--muted); margin-top: .45rem; }
+  .columns .trail { color: var(--ink); font-weight: 650; }
+  .note { border-left: 3px solid var(--teal); padding-left: .8rem; margin-top: 1rem; color: var(--muted); }
+  .table { width: 100%; border-collapse: collapse; font-size: .93rem; }
+  .table th, .table td { border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; padding: .62rem .7rem; }
+  .table thead { background: var(--teal-pale); }
+  .table tbody th { color: var(--ink); }
+  .table tbody tr:last-child > * { border-bottom: 0; }
+  .table-wrap { overflow-x: auto; }
+  details { margin-top: 1rem; }
+  summary { color: var(--teal); font-weight: 700; cursor: pointer; }
+  details > p, details > ul { margin-block: .65rem 0; }
+  pre { margin: .65rem 0 0; padding: .9rem; background: #142b35; color: #f4fbf8; overflow-x: auto; border-radius: .45rem; }
+  ul { padding-left: 1.2rem; }
+  li + li { margin-top: .3rem; }
+  .flow > li + li { margin-top: 0; }
+  .references { font-size: .88rem; color: var(--muted); }
+  footer { padding: 1.25rem 0 2rem; }
+  @media (max-width: 900px) { .controls { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 670px) {
+    .wrap { width: min(100% - 1.5rem, 1140px); }
+    .hero > p { margin-top: .65rem; }
+    .flow { flex-direction: column; gap: 1.15rem; }
+    .flow > li + li::before { left: .9rem; top: -1.15rem; content: "↓"; }
+    .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .lane { grid-template-columns: minmax(0, 1fr); gap: .1rem; }
+    .lane > strong { padding: .25rem .5rem .45rem; }
+    .columns { grid-template-columns: 1fr; }
+    .table th, .table td { padding: .5rem .4rem; }
+  }
+  @media (prefers-reduced-motion: reduce) { :root { scroll-behavior: auto; } }
+  @media print {
+    :root { color: #111; font-size: 10pt; }
+    body { background: white; }
+    .wrap { width: 100%; }
+    nav, .controls { display: none; }
+    .hero { padding-top: 1rem; }
+    main > section { padding: 1rem 0; }
+    .table tr, .panel, .lane, .flow { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="identity">Autonomous Delivery <small>Beta v0.3.0</small></div>
+    <nav aria-label="Page sections">
+      <a href="#explore">Explore</a><a href="#routes">Routes</a><a href="#authority">Authority</a>
+      <a href="#verification">Verification</a><a href="#models">Model choice</a><a href="#example">Live example</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+  <div class="hero">
+    <h1>From message dump to delivered output</h1>
+    <p>Follow the handoffs from your rough input to verified code, a document, or both. The controller saves the run between stages so you can return to the same work after a pause.</p>
+  </div>
+  <ol class="flow" aria-label="Delivery at a glance">
+    <li><span class="node owner"><strong>1 · You send a dump</strong><small>Idea, literature, brainstorm, or Forge handoff</small></span></li>
+    <li><span class="node"><strong>2 · Shape the request</strong><small>Outcome, output class, authority, checks, and dispatch cap</small></span></li>
+    <li><span class="node worker"><strong>3 · Route and build</strong><small>Choose a route, resolve owner gates, and save text artifacts</small></span></li>
+    <li><span class="node worker"><strong>4 · Verify</strong><small>Check the original behaviors against the saved build</small></span></li>
+    <li><span class="node output"><strong>5 · Deliver</strong><small><code>artifacts/</code>, verification results, and shareable telemetry</small></span></li>
+  </ol>
+
+  <section id="explore" class="explorer panel" aria-labelledby="explore-title">
+    <h2 id="explore-title">Explore a route</h2>
+    <form class="controls" id="route-controls">
+      <label>Output<select id="kind"><option value="code">Code</option><option value="non-code">Document</option><option value="mixed" selected>Code + document</option></select></label>
+      <label>Authority<select id="mode"><option value="A">A · Approve a proposal</option><option value="B" selected>B · Delegate within limits</option><option value="C">C · Name the deliverable</option></select></label>
+      <label>Default worker<select id="worker"><option value="codex">Codex adapter</option><option value="custom">Trusted executable</option></select></label>
+      <label>Build worker<select id="build"><option value="host">Native · workspace host</option><option value="native">Native · executable</option><option value="default">Default worker</option></select></label>
+      <label>Verifier<select id="verify"><option value="local">Independent checker</option><option value="default">Default worker</option></select></label>
+    </form>
+    <ol class="flow" aria-label="Selected route" id="selected-path">
+      <li><span class="node worker"><strong id="route-label">Route · Codex</strong><small>Select a fitting deliverable</small></span></li>
+      <li><span class="node owner"><strong id="gate-label">B · Within scope</strong><small id="gate-detail">An allowed proposal proceeds</small></span></li>
+      <li><span class="node worker"><strong id="build-label">Build Auto → Product Brief</strong><small id="build-detail">Workspace agent serves both jobs</small></span></li>
+      <li><span class="node worker"><strong id="verify-label">Independent checker</strong><small id="verify-detail">Runs the saved snapshot and submits evidence</small></span></li>
+      <li><span class="node output"><strong>Publish verified files</strong><small>Every original check must pass</small></span></li>
+    </ol>
+    <p class="preview-result" id="selected-summary" role="status"><strong>4 minimum dispatches.</strong> Code + document using native workflows. Approvals and retries can add time or calls.</p>
+    <details>
+      <summary>Show the matching start command</summary>
+      <pre id="command">python3 "$DELIVER" start "$RUN" --request request.json --codex --native-host --verify-worker /path/to/checker</pre>
+      <p class="preview-result">Set <code>DELIVER</code> to the installed skill’s <code>scripts/deliver.py</code> and <code>RUN</code> to a new directory whose parent exists. Match <code>kind</code>, <code>authority.mode</code>, and checks in <code>request.json</code>. Start native workspace-hosted runs in the background so the workspace agent can serve each pending job.</p>
+    </details>
+  </section>
+
+  <section id="routes" aria-labelledby="routes-title">
+    <header class="section-head">
+      <h2 id="routes-title">Which build route runs?</h2>
+      <p>All four intake types use the same controller. Your chosen output class determines the native build sequence. The default worker always handles routing.</p>
+    </header>
+    <div class="lanes">
+      <div class="lane" data-lane="code"><strong>Code <code>code</code></strong><ol class="flow" aria-label="Native code route">
+        <li><span class="node worker">Build Auto</span></li><li><span class="node">Verify code</span></li><li><span class="node output">Code files</span></li>
+      </ol></div>
+      <div class="lane" data-lane="non-code"><strong>Document <code>non-code</code></strong><ol class="flow" aria-label="Native document route">
+        <li><span class="node worker">Product Brief</span></li><li><span class="node">Verify brief</span></li><li><span class="node output">Product brief</span></li>
+      </ol></div>
+      <div class="lane" data-lane="mixed" data-selected="true"><strong>Both <code>mixed</code></strong><ol class="flow" aria-label="Native mixed route">
+        <li><span class="node worker">Build Auto</span></li><li><span class="node worker">Product Brief</span></li><li><span class="node">Verify both together</span></li><li><span class="node output">Code + brief</span></li>
+      </ol></div>
+      <div class="lane" data-lane="default"><strong>Default-worker build<br>Any output class</strong><ol class="flow" aria-label="Non-native route">
+        <li><span class="node worker">Codex adapter or trusted executable builds from the route</span></li><li><span class="node">Verify snapshot</span></li><li><span class="node output">Requested text files</span></li>
+      </ol></div>
+    </div>
+    <p class="note">Native execution accepts Build Auto and Product Brief. Other document workflows, deployment, binary outputs, and worktree integration are separate work. For a run-local operator guide or research synthesis, arrange a default-worker build that can produce it. Native document delivery includes a Product Brief.</p>
+    <details>
+      <summary>What the controller hands to each worker</summary>
+      <p>Each <code>attempts/&lt;n&gt;/job.json</code> carries the original request and checks, owner answers, current route, previous artifacts and check feedback when present, and remaining calls and timeout. A workspace agent uses <code>status</code> to locate native jobs, runs <code>native_host.py prepare</code>, serves the named workflow in the isolated attempt workspace, then uses <code>submit</code> with terminal evidence and artifact paths. <code>--native-worker</code> serves those same jobs through a trusted executable. Native language settings default to English and can be set separately for communication and document output.</p>
+      <p>Workers write durable <code>receipt.json</code> files. A mixed run stages the code receipt before dispatching the brief, so the document job sees the saved code. The controller checks native evidence hashes and checks that v2 artifacts match their source evidence.</p>
+    </details>
+  </section>
+
+  <section id="authority" aria-labelledby="authority-title">
+    <header class="section-head">
+      <h2 id="authority-title">When does it ask you?</h2>
+      <p>Authority controls when a route can start or replace the currently selected deliverable. A worker can also ask an owner question in any phase.</p>
+    </header>
+    <div class="columns">
+      <article class="panel"><h3>A · Approve a proposal</h3><p class="trail">Propose → owner approves → build</p><p>The first proposal and every replacement wait for your explicit approval.</p></article>
+      <article class="panel"><h3>B · Delegate within limits</h3><p class="trail">Check boundaries → proceed or pause</p><p>An in-scope proposal or replacement can proceed. A mismatched name under prose limits with no name allowlist requires approval. A structured-boundary violation stops before that route can build.</p></article>
+      <article class="panel"><h3>C · Name the deliverable</h3><p class="trail">Exact match → build</p><p>A different initial name or any replacement requires your approval.</p></article>
+    </div>
+    <p class="note">Mode B can constrain the output class, exact deliverable names, or both. Prose limits guide workers through every phase. The controller checks the structured fields and the route name. Keep the same run when answering or approving.</p>
+    <details>
+      <summary>What belongs in the request</summary>
+      <p>Set <code>intake.kind</code> to <code>idea</code>, <code>literature</code>, <code>brainstorm</code>, or <code>forge</code> and include the source text. Record <code>kind</code>, <code>authority.mode</code>, <code>authority.outcome</code>, owner limits and any exact deliverable label, and at least one check with a stable ID. Set a positive <code>budget</code> and optionally <code>timeout_seconds</code>, which defaults to 600 per call.</p>
+    </details>
+  </section>
+
+  <section id="verification" aria-labelledby="verification-title">
+    <header class="section-head">
+      <h2 id="verification-title">How it proves delivery</h2>
+      <p>Every original check must pass. Typed checks bind the result to the artifact snapshot’s SHA-256 hashes. The controller checks those hashes again before publishing.</p>
+    </header>
+    <ol class="flow" aria-label="Verification and publishing flow">
+      <li><span class="node"><strong>Staged files</strong><small>Hash the snapshot</small></span></li>
+      <li><span class="node worker"><strong>Run original checks</strong><small>Default worker or independent checker</small></span></li>
+      <li><span class="node owner"><strong>Resolve the verdict</strong><small>Pass all → publish. Fail or inapplicable → repair. Checker fault → reverify.</small></span></li>
+      <li><span class="node output"><strong>Publish and record</strong><small>Verified files in <code>artifacts/</code> plus status and hashes</small></span></li>
+    </ol>
+    <div class="columns" style="margin-top:.9rem">
+      <article class="panel"><h3>Executable</h3><p>Trusted <code>--verify-worker</code> runs the files and records the command, exit status, and output.</p></article>
+      <article class="panel"><h3>Source inspection</h3><p>Exact lines and quotes from the artifact, original intake, or both, as required by the check.</p></article>
+      <article class="panel"><h3>Judgment</h3><p>Verifier explains its criteria and assessment. The verdict is labeled as judgment.</p></article>
+    </div>
+    <h3 id="recovery" style="margin:1.3rem 0 .55rem">Recovery paths on the same run</h3>
+    <div class="table-wrap"><table class="table" aria-labelledby="recovery">
+      <thead><tr><th scope="col">What happens</th><th scope="col">Next step</th><th scope="col">Where it goes</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Attempt dispatched</th><td><code>status RUN</code> shows the job and worker. Serve a hosted job or wait for the worker.</td><td>Receipt → resume saved phase if stopped.</td></tr>
+        <tr><th scope="row">Proposal or owner question</th><td><code>resume RUN --approve ID</code> or <code>resume RUN --answer '…'</code> after your decision.</td><td>Approval → build. Answer → rerun the blocked phase.</td></tr>
+        <tr><th scope="row">Interrupted, missing or invalid receipt</th><td>Check <code>status</code> and the private log. Use bare <code>resume</code> to adopt a late receipt or <code>resume RUN --retry</code> to request a replacement.</td><td>Valid late receipt wins before retry. A funded replacement closes the missing-receipt attempt.</td></tr>
+        <tr><th scope="row">Independent checker fault</th><td>Fix and preflight the checker. Use <code>resume RUN --reverify</code>, with <code>--budget NEW_TOTAL</code> when needed.</td><td>Saved build → verification again.</td></tr>
+        <tr><th scope="row">Check fails or is inapplicable</th><td>The controller supplies check feedback for repair if calls remain.</td><td>Build again → recheck all original IDs. Native mixed repair replays its build sequence.</td></tr>
+        <tr><th scope="row">Dispatch cap reached</th><td><code>resume RUN --budget NEW_TOTAL</code> after you authorize the larger total.</td><td>Rechecks any pending receipt before replacement, or continues the saved phase.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">Each new route, build, verify, and retry dispatch consumes one call. Publishing uses the saved results. Native workflow subcalls have their own host budgets. <code>status</code> reports dispatch and usage coverage. Share <code>telemetry.json</code> for diagnosis and keep the original run records private.</p>
+    <details>
+      <summary>Storage and size limits</summary>
+      <p>A run holds <code>state.json</code>, attempt jobs, worker logs and receipts, then verified files under <code>artifacts/</code>. New runs write a local <code>telemetry.json</code> with fixed diagnostic labels, counts, and timings. <code>telemetry RUN</code> also exports it from saved state. The request file is capped at 512 KiB. Each serialized receipt is capped at 4 MiB. The Codex adapter reads jobs up to 8 MiB, including the joint snapshot for mixed verification. Use run-local UTF-8 text files within those limits.</p>
+    </details>
+  </section>
+
+  <section id="models" aria-labelledby="models-title">
+    <header class="section-head">
+      <h2 id="models-title">Where you choose the model</h2>
+      <p>Pick the worker for each stage first. Then set the model in the place that runs that worker.</p>
+    </header>
+    <div class="table-wrap"><table class="table" aria-label="Model-choice controls">
+      <thead><tr><th scope="col">Worker</th><th scope="col">Stages</th><th scope="col">Customization</th></tr></thead>
+      <tbody>
+        <tr><th scope="row"><code>--codex</code></th><td>Routing, default-worker builds, default verification</td><td><code>--model MODEL</code> and <code>--effort low|medium|high|xhigh</code>. One override pair applies to every stage this worker handles. Omit either flag to use the configured Codex setting. Use a model ID and effort your provider and account support.</td></tr>
+        <tr><th scope="row"><code>--native-host</code></th><td>Native builds</td><td>Choose the model and reasoning settings in the workspace agent host. Nested workflow calls use that host’s tooling and budget. Build Auto’s <code>workflow.implementation_handoff</code> can choose a separate model or tool for delegated implementation when the host supports it.</td></tr>
+        <tr><th scope="row"><code>--native-worker PATH</code></th><td>Native builds</td><td>The executable integration chooses its provider and model. It can dispatch differently for Build Auto and Product Brief while preserving the fixed sequence and receipts.</td></tr>
+        <tr><th scope="row"><code>--worker PATH</code></th><td>Routing, default-worker builds, default verification</td><td>The trusted executable can choose a model per <code>job.phase</code> or handle a phase locally. Its own configuration supplies model and provider choices.</td></tr>
+        <tr><th scope="row"><code>--verify-worker PATH</code></th><td>Verification only</td><td>Use a local checker for typed executable behaviors. Its configuration controls any downstream model use. A deterministic browser or runtime checker can run locally.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">Model and effort flags apply only to the Codex adapter, even in a native run. They are start-time settings. For separate settings per phase, use a custom worker or combine the default worker with a separate native host or verifier.</p>
+    <details>
+      <summary>Show a Codex model override example</summary>
+      <pre>python3 "$DELIVER" start "$RUN" --request request.json \
+  --codex --model "$MODEL" --effort medium --native-host \
+  --verify-worker /path/to/checker</pre>
+      <p class="preview-result">In this example the adapter uses <code>MODEL</code> for routing. The workspace host serves the build. The separate checker owns verification. <code>MODEL</code> is an ID configured for your provider. When the Codex adapter handles a stage, it opens a fresh read-only session and sends the job to that provider. Use authorized material for the selected worker.</p>
+    </details>
+  </section>
+
+  <section id="example" aria-labelledby="example-title">
+    <header class="section-head">
+      <h2 id="example-title">The Lantern House in practice</h2>
+      <p>The saved U7 run took a memory-palace game request through native mixed delivery. The owner judged the game and guide usable as delivered.</p>
+    </header>
+    <ol class="flow" aria-label="Lantern House dispatch timeline">
+      <li><span class="node worker"><strong>1 · Route</strong><small>Browser game + guide</small></span></li>
+      <li><span class="node worker"><strong>2 · Build Auto</strong><small><code>index.html</code></small></span></li>
+      <li><span class="node worker"><strong>3 · Product Brief</strong><small><code>memory-palace-brief.md</code></small></span></li>
+      <li><span class="node owner"><strong>4–5 · Checker faults</strong><small>Owner extends the cap twice. Saved files carry forward.</small></span></li>
+      <li><span class="node output"><strong>6 · Reverify and deliver</strong><small>4/4 acceptance checks pass. Browser playthrough scores 4/5 by design.</small></span></li>
+    </ol>
+    <details class="references">
+      <summary>Repository sources</summary>
+      <ul>
+        <li>Controller routes, workers, and recovery in <code>skills/method/bmad-deliver/scripts/deliver.py</code>.</li>
+        <li>Codex model arguments and job packing in <code>skills/method/bmad-deliver/scripts/codex_worker.py</code>.</li>
+        <li>Request, evidence, and host instructions in <code>skills/method/bmad-deliver/references/run-record.md</code> and <code>references/native-host.md</code> within the skill.</li>
+        <li>Native implementation customization in <code>skills/method/bmad-build-auto/customize.toml</code>.</li>
+        <li>Live run results in <code>.ai-context/delivery-u7/scorecard.md</code>.</li>
+      </ul>
+      <p>Route map checked against repository revision <code>f381ddd4</code> and the installed v0.3.0 controller.</p>
+    </details>
+  </section>
+</main>
+<footer class="wrap"><a href="#explore">Back to the route explorer ↑</a></footer>
+<script>
+  const byId = id => document.getElementById(id);
+  const authority = {
+    A: ['A · Approve first', 'An owner must approve the proposal'],
+    B: ['B · Within scope', 'An allowed route proceeds. Other proposals can stop or pause.'],
+    C: ['C · Exact name', 'The named deliverable proceeds. A different name needs approval.']
+  };
+  const output = {
+    code: ['Code', 'Build Auto'],
+    'non-code': ['Document', 'Product Brief'],
+    mixed: ['Code + document', 'Build Auto → Product Brief']
+  };
+  function updateRoute() {
+    const kind = byId('kind').value;
+    const mode = byId('mode').value;
+    const worker = byId('worker').value;
+    const build = byId('build').value;
+    const verify = byId('verify').value;
+    const isCodex = worker === 'codex';
+    const native = build !== 'default';
+    const independent = verify === 'local';
+    const workerName = isCodex ? 'Codex adapter' : 'Trusted executable';
+    const dispatches = native && kind === 'mixed' ? 4 : 3;
+
+    byId('route-label').textContent = `Route · ${workerName}`;
+    [byId('gate-label').textContent, byId('gate-detail').textContent] = authority[mode];
+    byId('build-label').textContent = native ? output[kind][1] : workerName;
+    byId('build-detail').textContent = {
+      host: kind === 'mixed' ? 'Workspace agent serves both jobs' : 'Workspace agent serves the job',
+      native: 'Trusted integration invokes the native workflow sequence',
+      default: 'One default-worker build dispatch'
+    }[build];
+    byId('verify-label').textContent = independent ? 'Independent checker' : workerName;
+    byId('verify-detail').textContent = independent ? 'Runs the saved snapshot and submits evidence' : 'Source inspection and judgment for typed checks';
+    const count = document.createElement('strong');
+    count.textContent = `${dispatches} minimum dispatches.`;
+    const verificationNote = independent ? '' : ' Typed executable checks require an independent checker.';
+    byId('selected-summary').replaceChildren(count, ` ${output[kind][0]} using ${native ? 'native workflows' : 'the default worker'}. Approvals and retries can add time or calls.${verificationNote}`);
+
+    const args = ['python3 "$DELIVER" start "$RUN" --request request.json', isCodex ? '--codex' : '--worker /path/to/worker'];
+    if (build === 'host') args.push('--native-host');
+    if (build === 'native') args.push('--native-worker /path/to/native-worker');
+    if (independent) args.push('--verify-worker /path/to/checker');
+    byId('command').textContent = args.join(' ');
+    for (const lane of document.querySelectorAll('[data-lane]')) {
+      lane.dataset.selected = String(lane.dataset.lane === (native ? kind : 'default'));
+    }
+  }
+  byId('route-controls').addEventListener('change', updateRoute);
+  updateRoute();
+</script>
+</body>
+</html>
