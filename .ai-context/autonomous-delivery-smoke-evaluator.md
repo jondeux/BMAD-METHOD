@@ -1,6 +1,6 @@
 # Evaluator guide for blind Autonomous Delivery intake
 
-Use this guide to score [projects 9–12](autonomous-delivery-smoke-projects.md#blind-idea-to-application-prompts). Keep it in a separate workspace from the Delivery session. Submit only the chosen project’s quoted intake. When Delivery asks a normal owner question, supply the requested facts, decisions, checks, or approval. Record the proposal before giving any workflow guidance.
+Use this guide to score [projects 9–12](autonomous-delivery-smoke-projects.md#blind-idea-to-application-prompts). Keep it in a separate workspace from the Delivery session. Submit only the chosen project’s quoted prompt, including its `$bmad-deliver` callout. When Delivery asks a normal owner question, supply the requested facts, decisions, checks, or approval. Record the proposal before giving any workflow guidance.
 
 ## From a raw idea to a verified deliverable
 

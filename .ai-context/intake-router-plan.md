@@ -1,7 +1,7 @@
 # BMad intake as the Autonomous Delivery route phase
 
 - **Status** — Increment 5 is complete. The private v0.4.0 listing has historical release qualification and remains available in the catalog as an uninstalled entry.
-- **Workspace patch** — v0.4.1 adds the chat intake questionnaire and is the current locally qualified repository release. The [current project handoff](../project-handoff.md) records the verification boundary and next work.
+- **Workspace patch** — v0.4.1 adds the chat intake questionnaire and is the current locally qualified repository release. The [current project handoff](../HANDOFF_2026-11-28.md) records the verification boundary and next work.
 - **Rollback baseline** — The v0.3.0 archive and its separate installed copy remain available. The candidate resumed archived code, Product Brief, and mixed runs. The old runtime refused raw-intake state without modifying it.
 - **Host qualification** — Codex has the signed-in intake smoke from Increment 3 and local package verification. Claude Code workspace intake remains a preview with deterministic verification.
 - **Release files** — [v0.4.1 portable plugin](delivery-beta/autonomous-delivery-beta-0.4.1.zip) · [Standalone skill](delivery-beta/bmad-deliver-beta-0.4.1.zip) · [Archive checksums](delivery-beta/autonomous-delivery-beta-0.4.1.zip.sha256) · [v0.4.0 rollback checksums](delivery-beta/autonomous-delivery-beta-0.4.0.zip.sha256)

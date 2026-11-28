@@ -40,7 +40,7 @@ Run the [freshness routine](docs/reference/document-freshness.md) after module m
 
 ## Project handoff
 
-Read the [project handoff](project-handoff.md) before continuing Autonomous Delivery work from a fresh checkout.
+Read the [project handoff](HANDOFF_2026-11-28.md) before continuing Autonomous Delivery work from a fresh checkout.
 
 ## Approved learnings
 

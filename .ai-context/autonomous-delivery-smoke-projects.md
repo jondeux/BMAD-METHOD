@@ -62,23 +62,23 @@ Expected `thinking/product-brief`. Check that the brief preserves the limitation
 
 ## Blind idea-to-application prompts
 
-Start a fresh Delivery session using only the quoted text for the chosen project. Answer the questionnaire and factual follow-up questions as the owner. Keep the [evaluator guide](autonomous-delivery-smoke-evaluator.md) outside the Delivery session. Record the workflow that Delivery proposes and any capability gate it reaches.
+Start a fresh Delivery session with only the chosen project’s quoted prompt, including its `$bmad-deliver` callout. Answer the questionnaire and factual follow-up questions as the owner. Keep the [evaluator guide](autonomous-delivery-smoke-evaluator.md) outside the Delivery session. Record the workflow that Delivery proposes and any capability gate it reaches.
 
 ### 9. Community-room supply budget
 
-> We keep running short of supplies in the community room, and sometimes we buy more than we need. We have a small trial budget. I’d like help figuring out a better way to decide what to buy.
+> `$bmad-deliver` We keep running short of supplies in the community room, and sometimes we buy more than we need. We have a small trial budget. I’d like help figuring out a better way to decide what to buy.
 
 ### 10. Rainfall log summary
 
-> Our garden rain log has blank entries for days when nobody checked the gauge. I want a useful weekly summary. Before we settle how to handle blanks, I’d like evidence about how comparable rain logs distinguish missing readings from a day with no rain.
+> `$bmad-deliver` Our garden rain log has blank entries for days when nobody checked the gauge. I want a useful weekly summary. Before we settle how to handle blanks, I’d like evidence about how comparable rain logs distinguish missing readings from a day with no rain.
 
 ### 11. Repair café queue ticket board
 
-> Visitors at our repair café lose track of whose turn it is. I’d like people at the check-in desk to see who’s next and understand how the order was decided.
+> `$bmad-deliver` Visitors at our repair café lose track of whose turn it is. I’d like people at the check-in desk to see who’s next and understand how the order was decided.
 
 ### 12. Equipment reservation overlap guard
 
-> We keep double-booking shared equipment. I want a local way to spot a conflict before I accept a booking. We’ve agreed that back-to-back reservations are fine and that a booking for one item should never block another item.
+> `$bmad-deliver` We keep double-booking shared equipment. I want a local way to spot a conflict before I accept a booking. We’ve agreed that back-to-back reservations are fine and that a booking for one item should never block another item.
 
 ## Advanced WebGL2 simulation projects
 
@@ -86,18 +86,18 @@ Start with the raw prompt. Use the planning artifact to agree on the visual and 
 
 ### 13. Ray-traced water balloon burst · Mode A at delivery
 
-> Make a WebGL2 ray-tracing simulation of a bullet piercing a water balloon. Show the balloon popping and the water briefly retaining its shape, then deforming, breaking into droplets, falling, and splashing on the ground. Make the water motion and lighting as realistic and physically accurate as practical in a browser. Let me freeze or scrub the animation at any point and orbit the scene freely, including while paused. Add sliders for the simulated bullet speed, balloon size, lighting, gravity, surface tension, and playback speed. Deliver one self-contained HTML file with inline JavaScript, CSS, and WebGL2 shaders.
+> `$bmad-deliver` Make a WebGL2 ray-tracing simulation of a bullet piercing a water balloon. Show the balloon popping and the water briefly retaining its shape, then deforming, breaking into droplets, falling, and splashing on the ground. Make the water motion and lighting as realistic and physically accurate as practical in a browser. Let me freeze or scrub the animation at any point and orbit the scene freely, including while paused. Add sliders for the simulated bullet speed, balloon size, lighting, gravity, surface tension, and playback speed. Deliver one self-contained HTML file with inline JavaScript, CSS, and WebGL2 shaders.
 
 **What to verify.** Inspect frames before contact, during the burst, and after the water reaches the ground. Confirm that orbiting while paused leaves the simulation time fixed. Change the gravity and lighting and check that each changes the intended part of the scene. Record the chosen simulation and rendering approximations in the planning artifact.
 
 ### 14. Humpback breach and ocean splash · Mode C at delivery
 
-> Build a browser simulation of a humpback whale surfacing, breaching above the water, and splashing back into the ocean. Generate the whale, moving water, and spray in code. After the whale lands, show the impact ripples spreading and the foam fading. Let me trigger a breach, pause or scrub the animation, and orbit from the waterline to an overhead view. Give me sliders for wave height, sunlight direction, and playback speed. Deliver one offline HTML file with inline JavaScript, CSS, and WebGL2 shaders.
+> `$bmad-deliver` Build a browser simulation of a humpback whale surfacing, breaching above the water, and splashing back into the ocean. Generate the whale, moving water, and spray in code. After the whale lands, show the impact ripples spreading and the foam fading. Let me trigger a breach, pause or scrub the animation, and orbit from the waterline to an overhead view. Give me sliders for wave height, sunlight direction, and playback speed. Deliver one offline HTML file with inline JavaScript, CSS, and WebGL2 shaders.
 
 **What to verify.** Trigger a breach and observe the leap, splash, ripples, and fading foam in order. Freeze the landing and change camera angle without advancing time. Test a low and high wave setting. Adapted for offline WebGL2 delivery. [Spring Prompt whale-breach benchmark](https://springprompt.com/playground/whale-breach)
 
 ### 15. Ink diffusion and mixing lab · Mode B at delivery
 
-> Make a real-time WebGL2 simulation of ink mixing in water, viewed from above. Let me place colored drops and stir the fluid with the pointer. Show the dye moving in curls and gradually dispersing. Add sliders for viscosity, diffusion, and stir strength, plus a color picker, pause, single-step, and reset controls. Deliver one self-contained HTML file with the shaders, JavaScript, and CSS embedded. It should open offline.
+> `$bmad-deliver` Make a real-time WebGL2 simulation of ink mixing in water, viewed from above. Let me place colored drops and stir the fluid with the pointer. Show the dye moving in curls and gradually dispersing. Add sliders for viscosity, diffusion, and stir strength, plus a color picker, pause, single-step, and reset controls. Deliver one self-contained HTML file with the shaders, JavaScript, and CSS embedded. It should open offline.
 
 **What to verify.** Add two drops and stir the fluid. Confirm that pausing holds the pattern, single-step advances one step, and reset restores a clear tank. Compare two diffusion settings from the same starting state. Adapted from a published standalone simulation prompt. [PumpyDumpy ink-in-water prompt](https://ai.pumpydumpy2visual.com/en/ink-in-water#prompts-for-your-own-ink)
