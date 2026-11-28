@@ -1,11 +1,12 @@
 """Allowlisted BMad delivery beta archive inputs."""
 
 SKILL = "bmad-deliver"
-RELEASE_VERSION = "0.4.0"
+RELEASE_VERSION = "0.4.1"
 NATIVE = f"{SKILL}/assets/native"
 DELIVERY_FILES = (
     "SKILL.md",
     "bmod.toml",
+    "references/intake-questions.md",
     "references/native-host.md",
     "references/run-record.md",
     "references/evaluate-delivery.md",

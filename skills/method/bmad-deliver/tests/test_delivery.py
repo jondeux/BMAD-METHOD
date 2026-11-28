@@ -533,7 +533,7 @@ def test_new_raw_run_is_refused_by_archived_v030_reader(workspace):
     assert result["dispatched"] == 0 and result["canonical_request_pending"]
     assert result["intake_gate"]["code"] == "missing-budget"
     run = workspace / "run"
-    assert command("telemetry", str(run))["exporter_version"] == "0.4.0"
+    assert command("telemetry", str(run))["exporter_version"] == "0.4.1"
     saved = {path: path.read_bytes() for path in run.rglob("*") if path.is_file()}
     runner = archived_runner(workspace)
     for action in ("status", "resume"):

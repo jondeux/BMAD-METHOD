@@ -50,7 +50,7 @@ def test_matching_input_manifest_reproduces_the_archive(builder, monkeypatch, tm
         manifest = json.loads(archive.read(source))
         members = set(archive.namelist())
         assert manifest["manifest_version"] == 1
-        assert manifest["release_version"] == "0.4.0"
+        assert manifest["release_version"] == "0.4.1"
         assert manifest["product_brief_revision"] == builder.BRIEF_REVISION
         assert manifest["archive_format"] == "zip-stored-v1"
         assert manifest["builder_sha256"] == hashlib.sha256(PACKAGER.read_bytes()).hexdigest()
@@ -62,6 +62,7 @@ def test_matching_input_manifest_reproduces_the_archive(builder, monkeypatch, tm
             "bmad-deliver/scripts/subscription.py",
             "bmad-deliver/scripts/run_telemetry.py",
             "bmad-deliver/references/evaluate-delivery.md",
+            "bmad-deliver/references/intake-questions.md",
             "bmad-deliver/references/intake-routes.json",
             "bmad-deliver/references/holdout-cases.json",
             "bmad-deliver/references/check_holdout_code.py",

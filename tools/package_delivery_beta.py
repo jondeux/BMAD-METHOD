@@ -71,7 +71,8 @@ cp -R /absolute/path/to/extracted/bmad-deliver/. .agents/skills/bmad-deliver/
 
 Run the compatibility checker against the installed copy before opening its first
 workspace agent session. Invoke `$bmad-deliver` with the
-intended deliverable and observable checks. For Mode A, approve the proposal before
+intended deliverable and observable checks. Answer the chat questionnaire to set
+delegation and run settings. For Mode A, approve the proposal before
 the build. For Mode B, state the delegated outcome and limits. Mode C preserves the
 named deliverable.
 
@@ -244,6 +245,7 @@ def portable_payload(files, skill, version):
     manifest["version"] = version
     manifest["extensions"]["com.openai"]["interface"]["longDescription"] = (
         "Route ideas, research, and brainstorms through eight intake entry points in one saved run. "
+        "Choose delegation and run settings with the chat questionnaire before dispatch. "
         "Native delivery covers run-local code, Product Briefs, and compatible mixed work. "
         "The Codex intake adapter has signed-in smoke evidence. Claude Code workspace intake is a preview "
         "with deterministic checks only. Requires Python 3.11 or later on a POSIX host and uv for native workflows."
