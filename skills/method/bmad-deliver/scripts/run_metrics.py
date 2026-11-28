@@ -14,6 +14,8 @@ RUN_STATUSES = (
     "dispatched",
     "approval-required",
     "answer-required",
+    "capability-unavailable",
+    "subscription-paused",
     "budget-exhausted",
     "interrupted",
     "checker-fault",
@@ -26,6 +28,7 @@ ATTEMPT_STATUSES = (
     "replace",
     "failed",
     "checker-fault",
+    "subscription-paused",
     "no-receipt",
     "invalid-receipt",
     "superseded",
@@ -135,6 +138,8 @@ def provider_usage(directory):
 def worker_kind(state, attempt):
     if "verifier" in attempt:
         return "independent-checker"
+    if attempt.get("subscription_host") == "claude" or ("workflow" in attempt and "subscription_host" in attempt):
+        return "native-host"
     if "workflow" in attempt:
         native_worker = state.get("native_worker")
         return "native-host" if isinstance(native_worker, list) and native_worker[-1:] == ["wait"] else "native-worker"

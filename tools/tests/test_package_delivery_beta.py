@@ -37,14 +37,20 @@ def check(script, skill):
     return subprocess.run([sys.executable, "-B", str(script), str(skill)], capture_output=True, text=True, timeout=10)
 
 
-def test_matching_input_manifest_reproduces_the_archive(builder, monkeypatch, tmp_path):
+@pytest.mark.parametrize("plugin", [False, True], ids=["standalone", "portable"])
+def test_matching_input_manifest_reproduces_the_archive(builder, monkeypatch, tmp_path, plugin):
     original = tmp_path / "original.zip"
     rebuilt = tmp_path / "rebuilt.zip"
     unpacked = tmp_path / "unpacked"
-    pack(builder, monkeypatch, original)
+    options = ["--plugin"] if plugin else []
+    prefix = "skills/" if plugin else ""
+    source = prefix + builder.SOURCE_MANIFEST
+    pack(builder, monkeypatch, original, *options)
     with ZipFile(original) as archive:
-        manifest = json.loads(archive.read(builder.SOURCE_MANIFEST))
+        manifest = json.loads(archive.read(source))
         members = set(archive.namelist())
+        assert manifest["manifest_version"] == 1
+        assert manifest["release_version"] == "0.4.0"
         assert manifest["product_brief_revision"] == builder.BRIEF_REVISION
         assert manifest["archive_format"] == "zip-stored-v1"
         assert manifest["builder_sha256"] == hashlib.sha256(PACKAGER.read_bytes()).hexdigest()
@@ -52,35 +58,64 @@ def test_matching_input_manifest_reproduces_the_archive(builder, monkeypatch, tm
             "skills/method/bmad-deliver/scripts/deliver.py"
         )
         assert {
+            "bmad-deliver/scripts/intake_router.py",
+            "bmad-deliver/scripts/subscription.py",
             "bmad-deliver/scripts/run_telemetry.py",
             "bmad-deliver/references/evaluate-delivery.md",
+            "bmad-deliver/references/intake-routes.json",
             "bmad-deliver/references/holdout-cases.json",
             "bmad-deliver/references/check_holdout_code.py",
-        } <= members
-        assert set(manifest["files"]) == members - {builder.SOURCE_MANIFEST, "SHA256SUMS"}
+        } <= manifest["files"].keys()
         assert set(manifest["files"]) == {"INSTALL.md", *manifest["worktree_sources"], *manifest["historical_sources"]}
+        runtime_members = {prefix + name for name in manifest["files"] if name != "INSTALL.md"} | {source}
+        assert all(archive.getinfo(name).compress_type == ZIP_STORED for name in members)
         for name, expected in manifest["files"].items():
-            assert hashlib.sha256(archive.read(name)).hexdigest() == expected
-            assert archive.getinfo(name).compress_type == ZIP_STORED
-        checksums = {
-            name: digest
-            for digest, name in (line.split("  ", 1) for line in archive.read("SHA256SUMS").decode().splitlines())
-        }
-        assert set(checksums) == members - {"SHA256SUMS"}
-        assert all(hashlib.sha256(archive.read(name)).hexdigest() == digest for name, digest in checksums.items())
+            if name != "INSTALL.md" or not plugin:
+                assert hashlib.sha256(archive.read(prefix + name)).hexdigest() == expected
+        if plugin:
+            assert members == runtime_members | {"plugin.json", "assets/delivery.svg"}
+            with ZipFile(ROOT / builder.PORTABLE_BASELINE) as baseline:
+                assert archive.read("assets/delivery.svg") == baseline.read("assets/delivery.svg")
+                expected_manifest = json.loads(baseline.read("plugin.json"))
+            plugin_manifest = json.loads(archive.read("plugin.json"))
+            assert plugin_manifest.pop("version") == manifest["release_version"]
+            del expected_manifest["version"]
+            description = plugin_manifest["extensions"]["com.openai"]["interface"].pop("longDescription")
+            del expected_manifest["extensions"]["com.openai"]["interface"]["longDescription"]
+            assert all(word in description for word in ("eight intake entry points", "Codex", "Claude Code", "preview"))
+            assert plugin_manifest == expected_manifest
+        else:
+            assert members == runtime_members | {"INSTALL.md", "SHA256SUMS"}
+            checksums = {
+                name: digest
+                for digest, name in (line.split("  ", 1) for line in archive.read("SHA256SUMS").decode().splitlines())
+            }
+            assert set(checksums) == members - {"SHA256SUMS"}
+            assert all(hashlib.sha256(archive.read(name)).hexdigest() == digest for name, digest in checksums.items())
         archive.extractall(unpacked)
-    inputs = unpacked / builder.SOURCE_MANIFEST
-    pack(builder, monkeypatch, rebuilt, "--inputs", inputs)
+    skill = unpacked / prefix / "bmad-deliver"
+    installed = check(skill / "scripts/check_install.py", skill)
+    assert installed.returncode == 0, installed.stderr
+    version = subprocess.run(
+        [sys.executable, "-B", str(skill / "scripts/deliver.py"), "--version"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert version.returncode == 0 and version.stdout.strip() == manifest["release_version"]
+
+    inputs = unpacked / source
+    pack(builder, monkeypatch, rebuilt, *options, "--inputs", inputs)
     assert original.read_bytes() == rebuilt.read_bytes()
 
     with pytest.raises(SystemExit) as exists:
-        pack(builder, monkeypatch, original)
+        pack(builder, monkeypatch, original, *options)
     assert exists.value.code == 1
     assert original.read_bytes() == rebuilt.read_bytes()
     inputs.write_text("{}")
     different = tmp_path / "different.zip"
     with pytest.raises(SystemExit) as mismatch:
-        pack(builder, monkeypatch, different, "--inputs", inputs)
+        pack(builder, monkeypatch, different, *options, "--inputs", inputs)
     assert mismatch.value.code == 1
     assert not different.exists()
 
@@ -94,6 +129,16 @@ def test_missing_historical_object_leaves_no_archive(monkeypatch, tmp_path, caps
     assert error.value.code == 1
     message = capsys.readouterr().err
     assert "Cannot read Product Brief input" in message and "checkout with the pinned commit" in message
+    assert not archive.exists()
+
+
+def test_plugin_rejects_a_changed_metadata_archive(builder, monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(builder, "PORTABLE_BASELINE_SHA256", "0" * 64)
+    archive = tmp_path / "invalid.zip"
+    with pytest.raises(SystemExit) as error:
+        pack(builder, monkeypatch, archive, "--plugin")
+    assert error.value.code == 1
+    assert "pinned v0.3.0 plugin archive checksum differs" in capsys.readouterr().err
     assert not archive.exists()
 
 
@@ -138,6 +183,13 @@ def test_checker_keeps_a_legacy_install_available_and_detects_candidate_damage(b
     old = check(checker, legacy)
     assert old.returncode == 1 and "Legacy beta install" in old.stderr
     assert legacy_manifest.read_bytes() == saved
+
+    with ZipFile(ROOT / builder.PORTABLE_BASELINE) as baseline:
+        original = baseline.read(f"skills/{builder.SOURCE_MANIFEST}")
+    legacy_manifest.write_bytes(original)
+    mismatched = check(checker, legacy)
+    assert mismatched.returncode == 1 and "Use the original checker" in mismatched.stderr
+    assert legacy_manifest.read_bytes() == original
 
     (candidate / "scripts/run_metrics.py").write_text("unexpected edit")
     damaged = check(checker, candidate)

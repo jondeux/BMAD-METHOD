@@ -16,6 +16,12 @@ For browser checks, exercise the actual preview path and browser API once on the
 
 The first real U7 mixed case was a browser memory game and its player brief. All four checks passed, and the owner accepted the delivered pair. Two local checker faults required recovery of the same build and two extra approved dispatches. The direct-skill comparison remains unmeasured.
 
+## v0.4.0 release evidence
+
+Local deterministic qualification covers both release archives, compatibility and checksums, archived v0.3.0 code, brief, and mixed runs, and an installed intake smoke using trusted fixture workers. This verifies saved state, routing, and delivery contracts with known inputs. Keep these results separate from model routing quality and owner acceptance.
+
+The prior signed-in smoke covers the Codex subscription routing adapter. The v0.4.0 package qualification uses local workers. Claude Code workspace intake remains a preview with deterministic checks only. The historical U7 result covers a separate native mixed delivery and its owner's verdict.
+
 ## Frozen synthetic cases
 
 The holdout requests cover code, a document, and a mixed package. Find `holdout-cases.json` and `check_holdout_code.py` under `references/` in the installed skill or under `.ai-context/delivery-u7/` in the source checkout. Run the checker in the approved local execution environment on a staged artifact.

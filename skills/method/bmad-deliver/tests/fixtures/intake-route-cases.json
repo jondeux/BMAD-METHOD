@@ -1,0 +1,572 @@
+{
+  "schema_version": 1,
+  "catalog_version": 1,
+  "purpose": "Hand-labeled development cases for the future intake gate. Legacy cases create saved states with the pinned release and replay them with the checkout controller.",
+  "route_case_defaults": {
+    "budget": 4,
+    "timeout_seconds": 120,
+    "host": {
+      "included_allowance": "eligible"
+    },
+    "native_execution_enabled": true
+  },
+  "route_case_boundary": "Expected outcomes describe the route decision before any build claim. Per-case intake fields replace the defaults.",
+  "route_cases": [
+    {
+      "id": "cited-document-note",
+      "intake": {
+        "text": "Turn these interview notes into a cited Markdown note.",
+        "sources": [
+          {
+            "id": "notes",
+            "kind": "text",
+            "readable": true
+          }
+        ]
+      },
+      "expected": {
+        "route_id": "sources",
+        "subtype_id": "ingest-note",
+        "status": "capability-unavailable",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "finished-literature-review",
+      "intake": {
+        "text": "Synthesize this finished literature review for our vendor decision.",
+        "sources": [
+          {
+            "id": "review",
+            "kind": "pdf",
+            "readable": true
+          }
+        ]
+      },
+      "expected": {
+        "route_id": "sources",
+        "subtype_id": "research-process",
+        "status": "capability-unavailable",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "kept-manual",
+      "intake": {
+        "text": "Make this long Markdown manual easier for future agents to navigate while preserving its content.",
+        "sources": [
+          {
+            "id": "manual",
+            "kind": "markdown",
+            "readable": true
+          }
+        ]
+      },
+      "expected": {
+        "route_id": "sources",
+        "subtype_id": "maintained-document",
+        "status": "capability-unavailable",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "pressure-test",
+      "intake": {
+        "text": "Help me challenge whether a memory palace game is worth building."
+      },
+      "expected": {
+        "route_id": "unclear",
+        "subtype_id": "pressure-test",
+        "status": "capability-unavailable",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "research-before-deciding",
+      "intake": {
+        "text": "Find evidence about whether we should try automated booking releases before deciding what to build."
+      },
+      "expected": {
+        "route_id": "unclear",
+        "subtype_id": "research-decision",
+        "status": "capability-unavailable",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "attachment-is-context",
+      "intake": {
+        "text": "Write a PRD from these two readable interview notes.",
+        "sources": [
+          {
+            "id": "interview-1",
+            "kind": "text",
+            "readable": true
+          },
+          {
+            "id": "interview-2",
+            "kind": "text",
+            "readable": true
+          }
+        ]
+      },
+      "expected": {
+        "route_id": "thinking",
+        "subtype_id": "prd",
+        "status": "capability-unavailable",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "essential-recording-unreadable",
+      "intake": {
+        "text": "Write a PRD based on this recording.",
+        "sources": [
+          {
+            "id": "interview",
+            "kind": "audio",
+            "readable": false
+          }
+        ]
+      },
+      "expected": {
+        "route_id": "thinking",
+        "subtype_id": "prd",
+        "status": "answer-required",
+        "missing": "readable-source",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "attachment-only",
+      "intake": {
+        "text": "",
+        "sources": [
+          {
+            "id": "recording",
+            "kind": "video",
+            "readable": false
+          }
+        ]
+      },
+      "expected": {
+        "route_id": null,
+        "subtype_id": null,
+        "status": "answer-required",
+        "missing": "outcome",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "standalone-launch-guide",
+      "intake": {
+        "text": "Write a launch instruction manual for our existing browser game."
+      },
+      "expected": {
+        "route_id": "thinking",
+        "subtype_id": "other-document",
+        "status": "capability-unavailable",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "mode-a-proposal",
+      "intake": {
+        "text": "Propose a local Product Brief for the booking trial.",
+        "kind": "non-code",
+        "authority": {
+          "mode": "A",
+          "outcome": "Plan a booking trial"
+        },
+        "checks": {
+          "decision": {
+            "kind": "judgment",
+            "behavior": "Identify the proposed trial decision."
+          }
+        }
+      },
+      "expected": {
+        "route_id": "thinking",
+        "subtype_id": "product-brief",
+        "status": "approval-required",
+        "workflows": [
+          "bmad-product-brief"
+        ],
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "isolated-mechanical-edit",
+      "intake": {
+        "text": "In the isolated example.py, correct ROM_CAPACITY to ROOM_CAPACITY and return the corrected file.",
+        "kind": "code",
+        "authority": {
+          "mode": "C",
+          "outcome": "Correct the isolated example",
+          "deliverable": "Corrected example"
+        },
+        "checks": {
+          "spelling": {
+            "kind": "source-inspection",
+            "behavior": "The file defines ROOM_CAPACITY with the original value 12."
+          }
+        },
+        "sources": [
+          {
+            "id": "example",
+            "kind": "text",
+            "readable": true,
+            "excerpt": "ROM_CAPACITY = 12\n"
+          }
+        ]
+      },
+      "expected": {
+        "route_id": "trivial",
+        "subtype_id": "run-local-code",
+        "status": "ready",
+        "workflows": [
+          "bmad-build-auto"
+        ],
+        "build_eligible": true
+      }
+    },
+    {
+      "id": "worktree-typo",
+      "intake": {
+        "text": "Fix only this exact typo in the tracked README."
+      },
+      "expected": {
+        "route_id": "trivial",
+        "subtype_id": "worktree-edit",
+        "status": "capability-unavailable",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "existing-repo-scoped-change",
+      "intake": {
+        "text": "Prepare a local code change for the scoped password validation bug. Use the attached behavior requirements.",
+        "workspace": {
+          "existing_repo": true
+        },
+        "sources": [
+          {
+            "id": "requirements",
+            "kind": "pdf",
+            "readable": true
+          }
+        ],
+        "kind": "code",
+        "authority": {
+          "mode": "B",
+          "outcome": "Reject empty passwords",
+          "deliverable": "Validation patch",
+          "boundaries": {
+            "allowed_output_classes": [
+              "code"
+            ],
+            "allowed_deliverables": [
+              "Validation patch"
+            ]
+          }
+        },
+        "checks": {
+          "empty-password": {
+            "kind": "executable",
+            "behavior": "The local checker rejects empty passwords."
+          }
+        },
+        "verifier_available": true
+      },
+      "expected": {
+        "route_id": "small",
+        "subtype_id": "code",
+        "status": "ready",
+        "workflows": [
+          "bmad-build-auto"
+        ],
+        "workspace": {
+          "existing_repo": true
+        },
+        "build_eligible": true
+      }
+    },
+    {
+      "id": "mode-b-boundary-conflict",
+      "intake": {
+        "text": "Write a local Product Brief for the booking trial.",
+        "kind": "non-code",
+        "authority": {
+          "mode": "B",
+          "outcome": "Plan a booking trial",
+          "boundaries": {
+            "allowed_output_classes": [
+              "code"
+            ],
+            "allowed_deliverables": [
+              "Booking prototype"
+            ]
+          }
+        },
+        "checks": {
+          "decision": {
+            "kind": "judgment",
+            "behavior": "Identify the trial decision."
+          }
+        }
+      },
+      "expected": {
+        "route_id": "thinking",
+        "subtype_id": "product-brief",
+        "status": "answer-required",
+        "missing": "compatible-owner-scope",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "mode-c-name-change",
+      "intake": {
+        "text": "Create a Product Brief for the booking trial.",
+        "kind": "non-code",
+        "authority": {
+          "mode": "C",
+          "outcome": "Plan a booking trial",
+          "deliverable": "Booking Product Brief"
+        },
+        "checks": {
+          "decision": {
+            "kind": "judgment",
+            "behavior": "Identify the trial decision."
+          }
+        }
+      },
+      "proposed_deliverable": "Alternate Product Brief",
+      "expected": {
+        "route_id": "thinking",
+        "subtype_id": "product-brief",
+        "status": "approval-required",
+        "workflows": [
+          "bmad-product-brief"
+        ],
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "native-mixed-order",
+      "intake": {
+        "text": "Build a small memory palace game and a Product Brief explaining the game and its intended audience.",
+        "kind": "mixed",
+        "authority": {
+          "mode": "C",
+          "outcome": "Deliver a playable prototype and its Product Brief",
+          "deliverable": "Memory palace game and Product Brief"
+        },
+        "checks": {
+          "game-loads": {
+            "kind": "executable",
+            "behavior": "The browser opens and starts the game."
+          },
+          "product-alignment": {
+            "kind": "source-inspection",
+            "behavior": "The Product Brief describes the implemented player flow."
+          }
+        },
+        "verifier_available": true
+      },
+      "expected": {
+        "route_id": "small",
+        "subtype_id": "code-and-product-brief",
+        "status": "ready",
+        "workflows": [
+          "bmad-build-auto",
+          "bmad-product-brief"
+        ],
+        "build_eligible": true
+      }
+    },
+    {
+      "id": "mixed-non-brief",
+      "intake": {
+        "text": "Build a small browser game and a separate operator manual, with the manual as the required document."
+      },
+      "expected": {
+        "route_id": "small",
+        "subtype_id": "other-mixed-deliverable",
+        "status": "capability-unavailable",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "inherited-repository",
+      "intake": {
+        "text": "I inherited this repo. Help me establish its project context and rules first.",
+        "workspace": {
+          "existing_repo": true
+        }
+      },
+      "expected": {
+        "route_id": "existing",
+        "subtype_id": "project-context",
+        "status": "capability-unavailable",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "one-epic",
+      "intake": {
+        "text": "Plan checkout refunds as one outcome, with separate validation, reconciliation, and operator UI stories."
+      },
+      "expected": {
+        "route_id": "epic",
+        "subtype_id": "epic-planning",
+        "status": "capability-unavailable",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "cross-team-initiative",
+      "intake": {
+        "text": "Plan an initiative coordinating billing, identity, and reporting epics across teams with a shared data contract."
+      },
+      "expected": {
+        "route_id": "project",
+        "subtype_id": "initiative-planning",
+        "status": "capability-unavailable",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "missing-original-checks",
+      "intake": {
+        "text": "Build one local Python utility that formats room names.",
+        "kind": "code",
+        "authority": {
+          "mode": "C",
+          "outcome": "Format room names",
+          "deliverable": "Room name formatter"
+        }
+      },
+      "expected": {
+        "route_id": "small",
+        "subtype_id": "code",
+        "status": "answer-required",
+        "missing": "acceptance-checks",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "missing-trusted-verifier",
+      "intake": {
+        "text": "Deliver an isolated browser game and its Product Brief.",
+        "kind": "mixed",
+        "authority": {
+          "mode": "C",
+          "outcome": "Deliver a playable game and its Product Brief",
+          "deliverable": "Browser game and Product Brief"
+        },
+        "checks": {
+          "game-loads": {
+            "kind": "executable",
+            "behavior": "The browser opens and starts the game."
+          }
+        },
+        "verifier_available": false
+      },
+      "expected": {
+        "route_id": "small",
+        "subtype_id": "code-and-product-brief",
+        "status": "answer-required",
+        "missing": "trusted-verifier",
+        "build_eligible": false
+      }
+    },
+    {
+      "id": "subscription-exhausted",
+      "intake": {
+        "text": "Find the best way to start this project.",
+        "host": {
+          "included_allowance": "exhausted"
+        }
+      },
+      "expected": {
+        "route_id": null,
+        "subtype_id": null,
+        "status": "subscription-paused",
+        "build_eligible": false
+      }
+    }
+  ],
+  "legacy_baseline": {
+    "release": "0.3.0",
+    "archive": ".ai-context/delivery-beta/autonomous-delivery-beta-0.3.0.zip",
+    "archive_sha256": "2592542ae305445346261cf55cd88d986f9559e0ec29c8fdb2f7748cd7679a2c",
+    "cases": [
+      {
+        "kind": "code",
+        "mode": "B",
+        "initial_budget": 2,
+        "pending": {
+          "status": "budget-exhausted",
+          "phase": "verify",
+          "dispatched": 2
+        },
+        "resume": [
+          "--budget",
+          "3"
+        ],
+        "workflows": [
+          "bmad-build-auto"
+        ],
+        "verification_version": 1,
+        "artifact_sha256": {
+          "booking.py": "bdb5103e3090ba89af041ba95fbff616a096d2d2e9a7cc6579c996cb9a60cbe5"
+        }
+      },
+      {
+        "kind": "non-code",
+        "mode": "A",
+        "initial_budget": 3,
+        "pending": {
+          "status": "approval-required",
+          "phase": "route",
+          "dispatched": 1
+        },
+        "resume": [
+          "--approve",
+          "1"
+        ],
+        "workflows": [
+          "bmad-product-brief"
+        ],
+        "verification_version": 2,
+        "artifact_sha256": {
+          "decision/brief.md": "f4723b0be5936dce40c96046e966bd15251afcbadb14a7f08eaf828e297772ad"
+        }
+      },
+      {
+        "kind": "mixed",
+        "mode": "C",
+        "initial_budget": 2,
+        "pending": {
+          "status": "budget-exhausted",
+          "phase": "build",
+          "dispatched": 2
+        },
+        "resume": [
+          "--budget",
+          "4"
+        ],
+        "workflows": [
+          "bmad-build-auto",
+          "bmad-product-brief"
+        ],
+        "verification_version": 2,
+        "artifact_sha256": {
+          "booking.py": "bdb5103e3090ba89af041ba95fbff616a096d2d2e9a7cc6579c996cb9a60cbe5",
+          "decision/brief.md": "f4723b0be5936dce40c96046e966bd15251afcbadb14a7f08eaf828e297772ad"
+        }
+      }
+    ],
+    "purpose": "The pending statuses and published artifact digests were observed by running the archived v0.3.0 controller with its deterministic synthetic worker."
+  }
+}

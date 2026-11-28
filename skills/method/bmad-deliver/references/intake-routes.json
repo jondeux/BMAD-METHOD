@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "catalog_version": 1,
+  "target_release": "0.4.0",
+  "routes": [
+    {
+      "id": "sources",
+      "label": "Documents, PDFs, research, or recordings",
+      "when": "The immediate goal is processing supplied sources. A different requested deliverable keeps its own route and carries source context or a preparation prerequisite.",
+      "subtypes": [
+        {
+          "id": "ingest-note",
+          "when": "Extract attributable facts, decisions, or notes from readable raw sources.",
+          "workflow_hint": "bmad-ingest",
+          "native_execution": null
+        },
+        {
+          "id": "research-process",
+          "when": "Synthesize a finished research report or literature review for a stated decision.",
+          "workflow_hint": "bmad-deep-recon",
+          "native_execution": null,
+          "workflow_mode": "process"
+        },
+        {
+          "id": "maintained-document",
+          "when": "Improve navigation of a long Markdown or text document the project will keep and edit.",
+          "workflow_hint": "bmad-shard-pro",
+          "native_execution": null
+        }
+      ]
+    },
+    {
+      "id": "unclear",
+      "label": "A vague idea or research gap",
+      "when": "The owner wants to generate options, test an idea, or gather evidence before choosing the intended outcome.",
+      "subtypes": [
+        {
+          "id": "generate-options",
+          "when": "Generate possible directions before the owner chooses one.",
+          "workflow_hint": "bmad-brainstorming",
+          "native_execution": null
+        },
+        {
+          "id": "pressure-test",
+          "when": "Evaluate whether an existing idea is worth pursuing.",
+          "workflow_hint": "bmad-forge-idea",
+          "native_execution": null
+        },
+        {
+          "id": "research-decision",
+          "when": "Gather new evidence before the owner decides what to do.",
+          "workflow_hint": "bmad-deep-recon",
+          "native_execution": null
+        }
+      ]
+    },
+    {
+      "id": "thinking",
+      "label": "A decision to make or a document to write",
+      "when": "The owner requests a decision or named document as the deliverable. A Product Brief handler fits only an approved Product Brief.",
+      "subtypes": [
+        {
+          "id": "product-brief",
+          "when": "Produce an explicitly requested Product Brief as the document deliverable.",
+          "native_execution": {
+            "output_class": "non-code",
+            "workflows": [
+              "bmad-product-brief"
+            ]
+          }
+        },
+        {
+          "id": "prd",
+          "when": "Produce a Product Requirements Document.",
+          "workflow_hint": "bmad-agent-pm",
+          "native_execution": null
+        },
+        {
+          "id": "prfaq-or-brd",
+          "when": "Produce a PRFAQ or Business Requirements Document.",
+          "workflow_hint": "bmad-agent-analyst",
+          "native_execution": null
+        },
+        {
+          "id": "ux-design",
+          "when": "Deliver the requested design and experience specifications.",
+          "workflow_hint": "bmad-ux",
+          "native_execution": null
+        },
+        {
+          "id": "architecture",
+          "when": "Deliver shared technical decisions in an architecture document.",
+          "workflow_hint": "bmad-architecture",
+          "native_execution": null
+        },
+        {
+          "id": "research-deliverable",
+          "when": "Deliver a research artifact when the requested output is the research itself.",
+          "workflow_hint": "bmad-deep-recon",
+          "native_execution": null
+        },
+        {
+          "id": "other-document",
+          "when": "Deliver a document type with no more specific listed subtype, such as an operator guide.",
+          "native_execution": null
+        }
+      ]
+    },
+    {
+      "id": "trivial",
+      "label": "An obvious, low-risk edit",
+      "when": "The owner names an exact mechanical edit with an easy check. The native path requires an authorized, isolated code deliverable.",
+      "subtypes": [
+        {
+          "id": "run-local-code",
+          "when": "Return an isolated corrected code artifact after an exact, low-risk mechanical edit.",
+          "native_execution": {
+            "output_class": "code",
+            "workflows": [
+              "bmad-build-auto"
+            ]
+          }
+        },
+        {
+          "id": "worktree-edit",
+          "when": "Apply a mechanical edit directly to an existing worktree.",
+          "native_execution": null
+        }
+      ]
+    },
+    {
+      "id": "small",
+      "label": "A one-session change",
+      "when": "A clear implementation outcome fits one session. Existing repo and source facts may travel with it. A mixed native route requires a real Product Brief among the approved artifacts.",
+      "subtypes": [
+        {
+          "id": "code",
+          "when": "Return a verified run-local code artifact for one implementation objective.",
+          "native_execution": {
+            "output_class": "code",
+            "workflows": [
+              "bmad-build-auto"
+            ]
+          }
+        },
+        {
+          "id": "code-and-product-brief",
+          "when": "Return verified run-local code followed by its explicitly requested Product Brief.",
+          "native_execution": {
+            "output_class": "mixed",
+            "workflows": [
+              "bmad-build-auto",
+              "bmad-product-brief"
+            ]
+          }
+        },
+        {
+          "id": "other-mixed-deliverable",
+          "when": "Return code and a required document type that differs from a Product Brief.",
+          "native_execution": null
+        }
+      ]
+    },
+    {
+      "id": "existing",
+      "label": "Work in an existing codebase",
+      "when": "The immediate goal is to establish or review repository context. A scoped implementation task carries existing-repo context on its sized route.",
+      "subtypes": [
+        {
+          "id": "project-context",
+          "when": "Review or establish rules and context for working in an existing repository.",
+          "workflow_hint": "bmad-project-context",
+          "native_execution": null
+        }
+      ]
+    },
+    {
+      "id": "epic",
+      "label": "One outcome, several sessions",
+      "when": "One coherent outcome needs multiple independently verifiable story builds.",
+      "subtypes": [
+        {
+          "id": "epic-planning",
+          "when": "Deliver requirements and ordered stories for one coherent outcome.",
+          "workflow_hint": "bmad-agent-po",
+          "native_execution": null
+        },
+        {
+          "id": "epic-execution",
+          "when": "Deliver the implemented and verified result across an epic's stories.",
+          "native_execution": null
+        }
+      ]
+    },
+    {
+      "id": "project",
+      "label": "Several epics or teams",
+      "when": "Several epics, teams, or shared decisions require initiative-level planning and coordination.",
+      "subtypes": [
+        {
+          "id": "initiative-planning",
+          "when": "Deliver shared requirements and an epic plan for multiple outcomes or teams.",
+          "workflow_hint": "bmad-agent-po",
+          "native_execution": null
+        },
+        {
+          "id": "initiative-execution",
+          "when": "Deliver integrated results and acceptance evidence across several epics.",
+          "native_execution": null
+        }
+      ]
+    }
+  ]
+}

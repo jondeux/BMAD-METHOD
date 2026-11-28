@@ -13,6 +13,8 @@ import sys
 import time
 from pathlib import Path
 
+import intake_router
+import subscription
 from bundle_layout import RUNTIME_FILES
 from deliver import (
     BUILD_AUTO,
@@ -33,9 +35,18 @@ from run_telemetry import DIAGNOSTIC_CODES
 BUNDLED_NATIVE = Path(__file__).resolve().parents[1] / "assets/native"
 
 
-def read_job(path):
+def read_job(path, *, allow_intake=False):
     job = read_json(path, limit=MAX_JSON_BYTES * 4)
-    require(job.get("phase") == "build" and job.get("native_workflow") in NATIVE_COMPLETION, "not a native build job")
+    require(isinstance(job, dict), "job must be a JSON object")
+    if allow_intake and job.get("phase") == "route":
+        require(
+            job.get("subscription_host") == "claude" and job.get("intake_version") == intake_router.INTAKE_VERSION,
+            "not a Claude workspace intake job",
+        )
+    else:
+        require(
+            job.get("phase") == "build" and job.get("native_workflow") in NATIVE_COMPLETION, "not a native build job"
+        )
     number = job.get("attempt")
     require(
         path.name == "job.json" and positive_int(number) and path.parent.name == str(number),
@@ -170,6 +181,15 @@ def main():
     complete.add_argument("--terminal", required=True)
     complete.add_argument("--artifact", action="append", required=True)
     complete.add_argument("--evidence", action="append", default=[])
+    classify = commands.add_parser("classify")
+    classify.add_argument("job", type=Path)
+    choice = classify.add_mutually_exclusive_group(required=True)
+    choice.add_argument("--route")
+    choice.add_argument("--defer", action="store_true")
+    classify.add_argument("--subtype")
+    pause = commands.add_parser("subscription-pause")
+    pause.add_argument("job", type=Path)
+    pause.add_argument("--reason", choices=subscription.PAUSE_REASONS, required=True)
     failed = commands.add_parser("fail")
     failed.add_argument("job", type=Path)
     failed.add_argument("--reason", required=True)
@@ -178,7 +198,7 @@ def main():
     try:
         job_path = args.job.resolve(strict=True)
         if args.command == "wait":
-            job = read_job(job_path)
+            job = read_job(job_path, allow_intake=True)
             require(args.receipt == job_path.with_name("receipt.json"), "invalid receipt path")
             until = time.monotonic() + job["timeout_seconds"]
             while time.monotonic() < until:
@@ -190,6 +210,13 @@ def main():
             print(setup(job_path, args.bmad_root.resolve() if args.bmad_root else None))
         elif args.command == "submit":
             submit(job_path, args.terminal, args.artifact, args.evidence)
+        elif args.command == "classify":
+            job = read_job(job_path, allow_intake=True)
+            require(job["phase"] == "route", "not a Claude workspace intake job")
+            commit_receipt(job_path, intake_router.classification_receipt(job, args.route, args.subtype))
+        elif args.command == "subscription-pause":
+            job = read_job(job_path, allow_intake=True)
+            commit_receipt(job_path, subscription.pause_receipt(job, args.reason))
         else:
             read_job(job_path)
             require(bool(args.reason.strip()), "native failure reason is required")

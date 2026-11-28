@@ -1,6 +1,7 @@
 """Allowlisted BMad delivery beta archive inputs."""
 
 SKILL = "bmad-deliver"
+RELEASE_VERSION = "0.4.0"
 NATIVE = f"{SKILL}/assets/native"
 DELIVERY_FILES = (
     "SKILL.md",
@@ -8,13 +9,16 @@ DELIVERY_FILES = (
     "references/native-host.md",
     "references/run-record.md",
     "references/evaluate-delivery.md",
+    "references/intake-routes.json",
     "scripts/bundle_layout.py",
     "scripts/check_install.py",
     "scripts/codex_worker.py",
     "scripts/deliver.py",
+    "scripts/intake_router.py",
     "scripts/native_host.py",
     "scripts/run_metrics.py",
     "scripts/run_telemetry.py",
+    "scripts/subscription.py",
 )
 RUNTIME_FILES = ("config_utils.py", "memlog.py", "render_skill.py", "resolve_config.py", "resolve_customization.py")
 BUILD_FILES = (

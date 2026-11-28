@@ -7,6 +7,7 @@ import sys
 import time
 import tomllib
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 
@@ -14,6 +15,8 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 RUNNER = SCRIPTS / "deliver.py"
 NATIVE_HOST = SCRIPTS / "native_host.py"
 REPO = SCRIPTS.parents[3]
+INTAKE_CASES = Path(__file__).with_name("fixtures") / "intake-route-cases.json"
+LEGACY_BASELINE = json.loads(INTAKE_CASES.read_text())["legacy_baseline"]
 AVAILABILITY_SQL = (
     "SELECT NOT EXISTS (SELECT 1 FROM bookings WHERE room_id = :room_id "
     "AND starts_at < ends_at AND starts_at < :requested_end AND :requested_start < ends_at);\n"
@@ -52,10 +55,41 @@ from deliver import digest, read_json, write_json
 
 job_file, receipt_file = map(Path, sys.argv[1:])
 job = read_json(job_file)
+if job.get("intake_version") == 1:
+    scenario = job["intake"]["text"].splitlines()[0]
+    assert job["phase"] == "route" and job["attempt_version"] == 2
+    assert "request" not in job and "authority" not in job["intake"]
+    assert any(route["id"] == "small" for route in job["routes"])
+    result = {
+        "status": "ok", "run_id": job["run_id"], "attempt": job["attempt"],
+        "intake_revision": job["intake_revision"], "route_id": "small", "subtype": "code",
+    }
+    if scenario == "intake-defer" and not job["answers"]:
+        result.update(route_id=None)
+        result.pop("subtype")
+    if scenario == "intake-stale":
+        result.update(intake_revision=job["intake_revision"] - 1)
+    if scenario == "intake-unknown-route":
+        result.update(route_id="made-up-route")
+    if scenario == "intake-wrong-subtype":
+        result.update(subtype="prd")
+    if scenario == "intake-injected-field":
+        result.update(workflows=["untrusted-executable"])
+    if scenario == "intake-document":
+        result.update(route_id="thinking", subtype="product-brief")
+    if scenario == "intake-mixed":
+        result.update(subtype="code-and-product-brief")
+    if scenario == "intake-route-only":
+        result.pop("subtype")
+    if scenario == "intake-no-receipt":
+        sys.exit(0)
+    write_json(receipt_file, result)
+    sys.exit(0)
 request = job["request"]
 phase = job["phase"]
 scenario = request["intake"]["text"].splitlines()[0]
-code = request["kind"] == "code"
+workflow = job.get("native_workflow")
+code = request["kind"] == "code" or (scenario == "legacy-baseline" and workflow == "bmad-build-auto")
 name = "Booking prototype" if code else "Director decision brief"
 route = {
     "deliverable": name,
@@ -105,7 +139,7 @@ def typed_result():
                 row["evidence"] = "OK"
             if scenario == "evidence-failed-exit":
                 row["observation"]["exit_code"] = 1
-            if scenario == "evidence-repair" and job["attempt"] == 3:
+            if scenario in ("evidence-repair", "intake-repair") and job["attempt"] == 3:
                 row.update(status="fail", evidence="Fixture requests a rebuild.")
         elif kind == "source-inspection":
             path, content = next((path, content) for path, content in artifacts.items() if path.endswith(".md"))
@@ -113,9 +147,10 @@ def typed_result():
                 (index, line) for index, line in enumerate(content.splitlines(), 1) if "false releases" in line
             )
             references = [{"source": "artifact", "path": path, "line_start": first, "quote": quote}]
-            if scenario.startswith("evidence"):
+            if scenario.startswith("evidence") or "intake" in check.get("required_sources", []):
+                line = request["intake"]["text"].splitlines().index(BRIEF_LIMITATION) + 1
                 references.append({
-                    "source": "intake", "line_start": 2, "line_end": 2, "quote": BRIEF_LIMITATION,
+                    "source": "intake", "line_start": line, "line_end": line, "quote": BRIEF_LIMITATION,
                 })
             if scenario == "evidence-missing-reference":
                 references[0]["path"] = "../brief.md"
@@ -159,6 +194,14 @@ elif phase == "build":
             result["workflows"] = ["custom-workflow", "bmad-build-auto"]
     elif scenario == "invalid-path":
         result = {"status": "ok", "artifacts": [{"path": "../escape", "content": "invalid"}]}
+    elif workflow and (scenario.startswith("intake-") or request["intake"].get("kind") == "literature" and scenario.startswith("Source ")):
+        path, content = (
+            ("availability.sql", AVAILABILITY_SQL)
+            if workflow == "bmad-build-auto" else ("brief.md", "Decision: trial manual recovery.\n" + BRIEF_LIMITATION + "\n")
+        )
+        if scenario == "intake-repair" and job["verification"]:
+            content += "-- Rebuilt from the previous result.\n"
+        result = {"status": "ok", "artifacts": [{"path": path, "content": content}]}
     elif scenario.startswith("evidence"):
         sql = AVAILABILITY_SQL
         if scenario == "evidence-repair" and job["verification"]:
@@ -213,6 +256,21 @@ elif phase == "verify":
             result = {"status": "checker-fault", "error": "The repaired build could not be checked."}
 else:
     raise AssertionError(phase)
+
+if phase == "build" and workflow and (
+    scenario == "legacy-baseline" or scenario.startswith(("intake-", "Source "))
+):
+    # These synthetic workers test the receipt protocol with matching evidence files.
+    artifact, = result["artifacts"]
+    evidence = Path("artifact-evidence")
+    evidence.write_bytes(artifact["content"].encode())
+    result["native"] = {
+        "workflow": workflow,
+        "status": "built" if workflow == "bmad-build-auto" else "complete",
+        "evidence": {evidence.name: digest(evidence.read_bytes())},
+    }
+    if job.get("verification_version") == 2:
+        result["native"]["artifact_sources"] = {artifact["path"]: evidence.name}
 
 hold_phase = os.environ.get("BMAD_TEST_HOLD")
 if hold_phase == f"{phase}:before":
@@ -281,14 +339,14 @@ def prepare(
     return ["start", str(workspace / "run"), "--request", str(request), "--worker", str(workspace / "fixture-worker")]
 
 
-def launch(*args):
+def launch(*args, runner=RUNNER):
     return subprocess.Popen(
-        [sys.executable, "-B", str(RUNNER), *args], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        [sys.executable, "-B", str(runner), *args], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
 
 
-def command(*args, expect=0):
-    with launch(*args) as process:
+def command(*args, expect=0, runner=RUNNER):
+    with launch(*args, runner=runner) as process:
         stdout, stderr = process.communicate(timeout=20)
         assert process.returncode == expect, (stdout, stderr)
         return json.loads(stdout) if stdout else stderr
@@ -303,6 +361,508 @@ def wait_for(path):
     while not path.exists():
         assert time.monotonic() < deadline, path
         time.sleep(0.02)
+
+
+def archived_runner(workspace):
+    archive_path = REPO / LEGACY_BASELINE["archive"]
+    assert hashlib.sha256(archive_path.read_bytes()).hexdigest() == LEGACY_BASELINE["archive_sha256"]
+    with ZipFile(archive_path) as package:
+        for name in ("deliver.py", "run_metrics.py", "run_telemetry.py"):
+            package.extract(f"skills/bmad-deliver/scripts/{name}", workspace)
+    return workspace / "skills" / "bmad-deliver" / "scripts" / "deliver.py"
+
+
+@pytest.mark.parametrize("case", LEGACY_BASELINE["cases"], ids=["code", "product-brief", "mixed"])
+def test_resume_saved_v030_run(workspace, monkeypatch, case):
+    legacy_runner = archived_runner(workspace)
+    monkeypatch.setenv("PYTHONPATH", str(legacy_runner.parent))
+
+    checks = {"caveat": {"kind": "source-inspection", "behavior": "Preserve the source limitation."}}
+    args = prepare(
+        workspace,
+        kind=case["kind"],
+        mode=case["mode"],
+        budget=case["initial_budget"],
+        scenario="legacy-baseline",
+        checks=checks if case["verification_version"] == 2 else None,
+    )
+    run = workspace / "run"
+    result = command(*args, "--native-worker", str(workspace / "fixture-worker"), expect=2, runner=legacy_runner)
+    assert {key: result[key] for key in case["pending"]} == case["pending"]
+    before = (run / "state.json").read_bytes()
+    saved_request = state(run)["request"]
+    inspected = command("status", str(run))
+    assert {key: inspected[key] for key in case["pending"]} == case["pending"]
+    assert (run / "state.json").read_bytes() == before
+    for field in ("route", "proposal", "verification_version"):
+        assert inspected.get(field) == result.get(field)
+
+    completed = command("resume", str(run), *case["resume"])
+    assert completed["status"] == "complete"
+    assert completed["dispatched"] == len(case["workflows"]) + 2
+    assert completed["verification_version"] == case["verification_version"]
+    assert state(run)["request"] == saved_request
+    assert state(run)["attempt_version"] == 1
+    assert [item["workflow"] for item in completed["native_runs"]] == case["workflows"]
+    assert {item["id"]: item["status"] for item in completed["verification"]} == dict.fromkeys(
+        saved_request["checks"], "pass"
+    )
+    assert completed["artifact_sha256"] == case["artifact_sha256"]
+    if case["verification_version"] == 2:
+        assert completed["verification_artifact_sha256"] == case["artifact_sha256"]
+    for name, digest in case["artifact_sha256"].items():
+        assert hashlib.sha256((run / "artifacts" / name).read_bytes()).hexdigest() == digest
+
+
+CODE_INTAKE = {
+    "text": "intake-code\nPrivate booking requirements.",
+    "kind": "code",
+    "authority": {"mode": "C", "outcome": "Check booking availability", "deliverable": "Availability query"},
+    "checks": {"booking": TYPED_CHECKS["booking"]},
+    "budget": 3,
+}
+
+
+def intake_args(workspace, intake, *, worker=True, verifier=True, native=True):
+    path = workspace / "raw-intake"
+    path.write_text(intake if isinstance(intake, str) else json.dumps(intake))
+    executable = str(workspace / "fixture-worker")
+    args = ["start", str(workspace / "run"), "--intake", str(path)]
+    for flag, enabled in (("--worker", worker), ("--native-worker", native), ("--verify-worker", verifier)):
+        if enabled:
+            args.extend((flag, executable))
+    return args
+
+
+def start_intake(workspace, intake=CODE_INTAKE, *, expect=0, worker=True, verifier=True, native=True):
+    args = intake_args(workspace, intake, worker=worker, verifier=verifier, native=native)
+    return command(*args, expect=expect)
+
+
+def update_intake(workspace, updates, *, expect=0):
+    path = workspace / "intake-update.json"
+    path.write_text(json.dumps(updates))
+    return command("resume", str(workspace / "run"), "--intake-update", str(path), expect=expect)
+
+
+def test_raw_intake_delivers_typed_artifact_after_one_classification(workspace):
+    run = workspace / "run"
+    result = start_intake(workspace)
+    assert result["status"] == "complete"
+    assert result["dispatched"] == 3
+    assert not result["canonical_request_pending"]
+    assert result["classification"] == {
+        "route_id": "small",
+        "subtype": "code",
+        "source": "classifier",
+        "intake_revision": 1,
+    }
+    saved = state(run)
+    assert saved["attempt_version"] == 2
+    assert saved["request"]["checks"] == CODE_INTAKE["checks"]
+    assert saved["request"]["authority"] == CODE_INTAKE["authority"]
+    assert saved["execution_plan"]["workflows"] == ["bmad-build-auto"]
+    assert (run / "artifacts" / "availability.sql").read_text() == AVAILABILITY_SQL
+    assert result["verification"][0]["observation"]["stdout"].startswith("SQLite confirmed")
+    assert result["verification_artifact_sha256"] == result["artifact_sha256"]
+    telemetry = (run / "telemetry.json").read_text()
+    assert "Private booking requirements" not in telemetry and "Availability query" not in telemetry
+
+
+@pytest.mark.parametrize("receipt_timing", ["before", "after"])
+def test_raw_typed_verification_recovers_from_controller_death(workspace, monkeypatch, receipt_timing):
+    run = workspace / "run"
+    attempt = run / "attempts" / "3"
+    verify_receipt = attempt / "receipt.json"
+    build_receipt = run / "attempts" / "2" / "receipt.json"
+    intake = {**CODE_INTAKE, "budget": 4}
+    committed = receipt_timing == "after"
+    monkeypatch.setenv("BMAD_TEST_HOLD", f"verify:{receipt_timing}")
+    with launch(*intake_args(workspace, intake)) as controller:
+        try:
+            wait_for(attempt / "worker-held")
+            build = build_receipt.read_bytes()
+            job = json.loads((attempt / "job.json").read_text())
+            assert verify_receipt.exists() == committed
+            receipt = verify_receipt.read_bytes() if committed else None
+        finally:
+            controller.kill()
+            controller.wait(timeout=5)
+            (attempt / "release").touch()
+    monkeypatch.delenv("BMAD_TEST_HOLD")
+    with (run / ".lock").open("a") as lock:
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                assert time.monotonic() < deadline, "Verification worker still holds the run lock"
+                time.sleep(0.02)
+
+    expected_hashes = {"availability.sql": hashlib.sha256(AVAILABILITY_SQL.encode()).hexdigest()}
+    assert job["artifact_sha256"] == expected_hashes == state(run)["attempts"][1]["artifact_sha256"]
+    assert not (run / "artifacts").exists()
+    if receipt is None:
+        paused = command("resume", str(run), expect=2)
+        assert (paused["status"], paused["phase"], paused["dispatched"]) == ("interrupted", "verify", 3)
+        assert paused["pending_attempt"]["status"] == "no-receipt"
+        assert not (run / "attempts" / "4").exists()
+        result = command("resume", str(run), "--retry")
+        assert result["dispatched"] == 4
+        attempts = state(run)["attempts"]
+        assert attempts[2]["status"] == "superseded"
+        assert attempts[3]["verification_id"] != job["verification_id"]
+        assert attempts[3]["retry"] == "interrupted"
+    else:
+        result = command("resume", str(run))
+        assert result["dispatched"] == 3
+        assert verify_receipt.read_bytes() == receipt
+        assert command("telemetry", str(run))["usage"]["attempts"][2]["receipt_source"] == "resumed-controller"
+        assert not (run / "attempts" / "4").exists()
+    assert result["status"] == "complete"
+    assert result["verification_artifact_sha256"] == result["artifact_sha256"] == expected_hashes
+    assert [row["status"] for row in result["verification"]] == ["pass"]
+    assert build_receipt.read_bytes() == build
+    published = (run / "artifacts" / "availability.sql").read_bytes()
+    assert hashlib.sha256(published).hexdigest() == expected_hashes["availability.sql"]
+
+
+def test_new_raw_run_is_refused_by_archived_v030_reader(workspace):
+    result = start_intake(workspace, "[private raw text] with Markdown punctuation", expect=2, worker=False)
+    assert result["dispatched"] == 0 and result["canonical_request_pending"]
+    assert result["intake_gate"]["code"] == "missing-budget"
+    run = workspace / "run"
+    assert command("telemetry", str(run))["exporter_version"] == "0.4.0"
+    saved = {path: path.read_bytes() for path in run.rglob("*") if path.is_file()}
+    runner = archived_runner(workspace)
+    for action in ("status", "resume"):
+        error = command(action, str(run), runner=runner, expect=1)
+        assert "unsupported attempt version" in error
+        assert {path: path.read_bytes() for path in run.rglob("*") if path.is_file()} == saved
+
+
+@pytest.mark.parametrize("raw", ["null", "[1, 2]"])
+def test_raw_text_that_looks_like_a_json_value_is_preserved(workspace, raw):
+    paused = start_intake(workspace, raw, expect=2, worker=False)
+    assert paused["intake_gate"]["code"] == "missing-budget"
+    assert state(workspace / "run")["intake"] == {"text": raw}
+    assert "intake must be an object" in update_intake(workspace, json.loads(raw), expect=1)
+
+
+@pytest.mark.parametrize("mode", ["A", "C"])
+def test_raw_approval_is_bound_to_the_current_intake_revision(workspace, mode):
+    run = workspace / "run"
+    owner = {**CODE_INTAKE["authority"], "mode": mode}
+    first = start_intake(workspace, {**CODE_INTAKE, "authority": owner, "deliverable": "Alternative query"}, expect=2)
+    assert first["status"] == "approval-required" and first["dispatched"] == 1
+    assert state(run)["request"] is None
+    second = update_intake(workspace, {"deliverable": "Revised query"}, expect=2)
+    assert second["status"] == "approval-required" and second["dispatched"] == 1
+    assert second["intake_revision"] == 2
+    assert second["proposal"]["execution_plan"]["intake_revision"] == 2
+    diagnostic = command("telemetry", str(run))
+    error = command("resume", str(run), "--approve", first["proposal"]["id"], expect=1)
+    assert "approval must name proposal" in error
+    assert command("telemetry", str(run)) == diagnostic
+    final = command("resume", str(run), "--approve", second["proposal"]["id"])
+    assert final["dispatched"] == 3 and final["route"]["deliverable"] == "Revised query"
+    assert not final["canonical_request_pending"]
+    assert state(run)["approvals"] == [second["proposal"]["id"]]
+    assert "intake updates require" in update_intake(workspace, {"text": "changed after freeze"}, expect=1)
+
+
+def test_raw_mode_b_respects_exact_delegation_and_preserves_the_run(workspace):
+    owner = {
+        "mode": "B",
+        "outcome": "Check availability",
+        "deliverable": "Availability query",
+        "boundaries": {"allowed_deliverables": ["Availability query"], "allowed_output_classes": ["code"]},
+    }
+    intake = {**CODE_INTAKE, "authority": owner, "deliverable": "Other query"}
+    del intake["kind"]  # The only allowed output class is sufficient owner authority.
+    blocked = start_intake(workspace, intake, expect=2)
+    assert blocked["status"] == "answer-required" and blocked["dispatched"] == 1
+    assert "outside the allowed deliverables" in blocked["question"]
+    accepted = update_intake(workspace, {"deliverable": "Availability query"})
+    assert accepted["status"] == "complete" and accepted["dispatched"] == 3
+    assert not state(workspace / "run")["approvals"]
+
+
+@pytest.mark.parametrize(
+    "scenario, problem",
+    [
+        ("intake-stale", "stale intake revision"),
+        ("intake-unknown-route", "unknown intake route ID"),
+        ("intake-wrong-subtype", "unknown intake subtype"),
+        ("intake-injected-field", "only the classification and its binding fields"),
+    ],
+)
+def test_raw_classifier_receipts_cannot_change_authority_or_escape_catalog(workspace, scenario, problem):
+    run = workspace / "run"
+    result = start_intake(workspace, {**CODE_INTAKE, "text": scenario}, expect=2)
+    assert result["status"] == "interrupted" and result["dispatched"] == 1
+    assert problem in result["error"] and "classification" not in result
+    assert state(run)["request"] is None
+    final = update_intake(workspace, {"route_id": "small", "subtype": "code"})
+    assert final["status"] == "complete" and final["dispatched"] == 3
+    assert final["classification"]["source"] == "owner"
+
+
+def test_raw_defer_can_resume_with_an_owner_answer_and_keep_it_private(workspace):
+    run = workspace / "run"
+    paused = start_intake(workspace, {**CODE_INTAKE, "text": "intake-defer", "budget": 4}, expect=2)
+    assert paused["classification"]["route_id"] is None
+    assert paused["status"] == "answer-required" and paused["dispatched"] == 1
+    final = command("resume", str(run), "--answer", "Private owner decision")
+    assert final["status"] == "complete" and final["dispatched"] == 4
+    assert final["classification"]["intake_revision"] == 2
+    assert "Private owner decision" not in json.dumps(command("telemetry", str(run)))
+
+
+def test_raw_subtype_update_reuses_the_classified_route(workspace):
+    intake = {**CODE_INTAKE, "text": "intake-route-only"}
+    del intake["kind"]
+    paused = start_intake(workspace, intake, expect=2)
+    assert paused["intake_gate"]["code"] == "missing-subtype" and paused["dispatched"] == 1
+    completed = update_intake(workspace, {"subtype": "code"})
+    assert completed["status"] == "complete" and completed["dispatched"] == 3
+    assert completed["classification"]["route_id"] == "small"
+    assert completed["classification"]["source"] == "owner"
+
+
+def test_raw_intake_pauses_for_unreadable_sources_and_unsupported_workflows(workspace):
+    run = workspace / "run"
+    intake = {
+        "sources": [{"id": "interview-1", "readable": False}],
+        "authority": {"mode": "C", "outcome": "Document the trial", "deliverable": "Product Brief"},
+        "checks": {"caveat": {**TYPED_CHECKS["caveat"], "required_sources": ["artifact", "intake"]}},
+        "budget": 2,
+        "route_id": "thinking",
+        "subtype": "prd",
+    }
+    unreadable = start_intake(workspace, intake, expect=2, worker=False)
+    assert unreadable["status"] == "answer-required" and unreadable["dispatched"] == 0
+    unsupported = update_intake(workspace, {"sources": [{"id": "interview-1", "excerpt": BRIEF_LIMITATION}]}, expect=2)
+    assert unsupported["status"] == "capability-unavailable" and unsupported["dispatched"] == 0
+    assert unsupported["classification"]["subtype"] == "prd"
+    approved = update_intake(workspace, {"subtype": "product-brief"})
+    assert approved["status"] == "complete" and approved["dispatched"] == 2
+    assert state(run)["request"]["intake"]["text"] == f"Source interview-1\n{BRIEF_LIMITATION}"
+    assert approved["verification"][0]["references"][1]["quote"] == BRIEF_LIMITATION
+
+
+def test_raw_classifier_cannot_silently_select_a_product_brief_for_another_document(workspace):
+    owner = {"mode": "C", "outcome": "Document the trial", "deliverable": "Product Requirements Document"}
+    intake = {
+        **CODE_INTAKE,
+        "text": "intake-document",
+        "kind": "non-code",
+        "authority": owner,
+        "checks": {"caveat": TYPED_CHECKS["caveat"]},
+    }
+    blocked = start_intake(workspace, intake, expect=2)
+    assert blocked["status"] == "answer-required" and blocked["dispatched"] == 1
+    assert blocked["intake_gate"]["code"] == "document-workflow"
+    assert state(workspace / "run")["request"] is None
+
+
+def test_raw_classifier_cannot_authorize_code_for_an_owner_named_prd(workspace):
+    owner = {"mode": "C", "outcome": "Document the trial", "deliverable": "Product Requirements Document"}
+    intake = {**CODE_INTAKE, "authority": owner}
+    del intake["kind"]
+    paused = start_intake(workspace, intake, expect=2)
+    assert paused["status"] == "answer-required" and paused["dispatched"] == 1
+    assert paused["intake_gate"]["code"] == "output-class"
+    assert state(workspace / "run")["request"] is None
+
+
+def test_raw_exact_product_brief_label_identifies_the_output_class(workspace):
+    intake = {
+        **CODE_INTAKE,
+        "text": "intake-document",
+        "authority": {"mode": "C", "outcome": "Document the trial", "deliverable": "Product Brief"},
+        "checks": {"caveat": TYPED_CHECKS["caveat"]},
+    }
+    del intake["kind"]
+    completed = start_intake(workspace, intake)
+    assert completed["dispatched"] == 3
+    assert completed["execution_plan"]["kind"] == "non-code"
+
+
+def test_raw_mode_c_can_approve_an_alternative_product_brief(workspace):
+    intake = {
+        **CODE_INTAKE,
+        "text": "intake-document",
+        "authority": {"mode": "C", "outcome": "Document the trial", "deliverable": "Product Requirements Document"},
+        "deliverable": "Booking trial brief",
+        "checks": {"caveat": TYPED_CHECKS["caveat"]},
+    }
+    del intake["kind"]
+    proposed = start_intake(workspace, intake, expect=2)
+    assert proposed["status"] == "approval-required" and proposed["dispatched"] == 1
+    assert proposed["proposal"]["route"]["workflows"] == ["bmad-product-brief"]
+    completed = command("resume", str(workspace / "run"), "--approve", proposed["proposal"]["id"])
+    assert completed["status"] == "complete" and completed["dispatched"] == 3
+
+
+@pytest.mark.parametrize(
+    "deliverable", ["Availability query and Product Brief", "Availability query and its Product Brief"]
+)
+def test_raw_mixed_delivery_pins_and_runs_the_catalog_workflows_in_order(workspace, deliverable):
+    intake = {
+        **CODE_INTAKE,
+        "text": "intake-mixed",
+        "kind": "mixed",
+        "checks": TYPED_CHECKS,
+        "budget": 4,
+        "authority": {**CODE_INTAKE["authority"], "deliverable": deliverable},
+    }
+    if deliverable.endswith(" and Product Brief"):
+        completed = start_intake(workspace, intake)
+        assert completed["classification"]["source"] == "classifier"
+    else:
+        blocked = start_intake(workspace, intake, expect=2)
+        assert blocked["intake_gate"]["code"] == "document-workflow" and blocked["dispatched"] == 1
+        completed = update_intake(workspace, {"route_id": "small", "subtype": "code-and-product-brief"})
+    assert completed["dispatched"] == 4
+    assert completed["execution_plan"]["workflows"] == ["bmad-build-auto", "bmad-product-brief"]
+    assert [item["workflow"] for item in completed["native_runs"]] == completed["execution_plan"]["workflows"]
+    assert set(completed["artifact_sha256"]) == {"availability.sql", "brief.md"}
+
+
+def test_raw_mode_a_proposes_a_catalog_label_and_class_for_approval(workspace):
+    intake = {**CODE_INTAKE, "authority": {"mode": "A", "outcome": "Check booking availability"}}
+    del intake["kind"]
+    proposed = start_intake(workspace, intake, expect=2)
+    assert proposed["status"] == "approval-required" and proposed["dispatched"] == 1
+    assert proposed["proposal"]["route"]["deliverable"] == "Run-local code artifact"
+    assert proposed["proposal"]["execution_plan"]["kind"] == "code"
+    run = workspace / "run"
+    completed = command("resume", str(run), "--approve", proposed["proposal"]["id"])
+    assert completed["status"] == "complete" and completed["dispatched"] == 3
+
+
+def test_raw_typed_checks_are_required_before_build(workspace):
+    intake = {**CODE_INTAKE, "checks": {"booking": "Reject overlap"}}
+    paused = start_intake(workspace, intake, expect=2, verifier=False)
+    assert paused["status"] == "answer-required" and paused["dispatched"] == 1
+    assert "typed checks" in paused["question"]
+    no_checker = update_intake(workspace, {"checks": CODE_INTAKE["checks"]}, expect=2)
+    assert no_checker["status"] == "capability-unavailable" and no_checker["dispatched"] == 1
+    assert no_checker["intake_gate"]["code"] == "checker-unavailable"
+
+
+@pytest.mark.parametrize(
+    "flag, gate", [("--native-worker", "native-unavailable"), ("--verify-worker", "checker-unavailable")]
+)
+def test_raw_intake_can_attach_missing_trusted_workers_and_publish_in_the_same_run(workspace, flag, gate):
+    run = workspace / "run"
+    paused = start_intake(workspace, expect=2, native=flag != "--native-worker", verifier=flag != "--verify-worker")
+    assert paused["intake_gate"]["code"] == gate and paused["dispatched"] == 1
+    assert flag in paused["next_action"]
+    run_id = state(run)["run_id"]
+    executable = str(workspace / "fixture-worker")
+    completed = command("resume", str(run), flag, executable)
+    assert completed["status"] == "complete" and completed["dispatched"] == 3
+    assert state(run)["run_id"] == run_id
+    assert (run / "artifacts" / "availability.sql").is_file()
+    assert "pending intake capability gate" in command("resume", str(run), flag, executable, expect=1)
+
+
+@pytest.mark.parametrize("allowance", ["unknown", "exhausted"])
+def test_raw_allowance_and_budget_gate_classification_and_delivery(workspace, allowance):
+    run = workspace / "run"
+    blocked = start_intake(workspace, {**CODE_INTAKE, "allowance": allowance, "budget": 1}, expect=2)
+    assert blocked["status"] == "subscription-paused" and blocked["dispatched"] == 0
+    capped = update_intake(workspace, {"allowance": "available"}, expect=2)
+    assert capped["status"] == "budget-exhausted" and capped["dispatched"] == 1
+    assert not capped["canonical_request_pending"]
+    done = command("resume", str(run), "--budget", "3")
+    assert done["status"] == "complete" and done["dispatched"] == 3
+    assert state(run)["request"]["budget"] == 1
+
+
+def test_local_allowance_pause_preserves_the_exact_pending_approval(workspace):
+    run = workspace / "run"
+    intake = {
+        **CODE_INTAKE,
+        "authority": {**CODE_INTAKE["authority"], "mode": "A"},
+        "route_id": "small",
+        "subtype": "code",
+    }
+    proposed = start_intake(workspace, intake, expect=2)
+    proposal = proposed["proposal"]["id"]
+    paused = update_intake(workspace, {"allowance": "exhausted"}, expect=2)
+    assert paused["status"] == "subscription-paused" and paused["dispatched"] == 0
+    assert "no proposal is waiting" in command("resume", str(run), "--approve", proposal, expect=1)
+    restored = update_intake(workspace, {"allowance": "available"}, expect=2)
+    assert restored["status"] == "approval-required" and restored["proposal"]["id"] == proposal
+    assert restored["intake_revision"] == proposed["intake_revision"]
+    final = command("resume", str(run), "--approve", proposal)
+    assert final["status"] == "complete" and final["dispatched"] == 2
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [None, {"budget": 3}, {"budget": 3, "allowance": "available"}, {"budget": 3, "allowance": "exhausted"}],
+    ids=["budget-flag", "budget-update", "available-allowance-update", "exhausted-allowance-update"],
+)
+def test_raw_budget_changes_keep_a_pending_classifier_receipt_eligible(workspace, updates):
+    run = workspace / "run"
+    job_path = run / "attempts" / "1" / "job.json"
+    paused = start_intake(workspace, {**CODE_INTAKE, "text": "intake-no-receipt", "budget": 1}, expect=2)
+    assert paused["status"] == "interrupted"
+    assert paused["pending_attempt"]["number"] == 1
+    job = job_path.read_bytes()
+    if updates is None:
+        extended = command("resume", str(run), "--budget", "3", expect=2)
+    else:
+        capped = command("resume", str(run), "--retry", expect=2)
+        assert capped["status"] == "budget-exhausted" and capped["pending_attempt"] == paused["pending_attempt"]
+        extended = update_intake(workspace, updates, expect=2)
+    assert extended["status"] == "interrupted"
+    assert (extended["dispatched"], extended["budget"]) == (1, 3)
+    assert extended["pending_attempt"] == paused["pending_attempt"]
+    assert extended["intake_revision"] == paused["intake_revision"]
+    assert job_path.read_bytes() == job
+
+    exhausted = updates is not None and updates.get("allowance") == "exhausted"
+    if exhausted:
+        retry = command("resume", str(run), "--retry", expect=2)
+        assert (retry["status"], retry["dispatched"]) == ("subscription-paused", 1)
+        assert retry["pending_attempt"] == paused["pending_attempt"]
+        assert "--intake-update" in retry["next_action"]
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-c",
+            "import sys\n"
+            "from pathlib import Path\n"
+            "from deliver import commit_receipt, read_json\n"
+            "from intake_router import classification_receipt\n"
+            "job = Path(sys.argv[1])\n"
+            "commit_receipt(job, classification_receipt(read_json(job), 'small', 'code'))",
+            str(job_path),
+        ],
+        check=True,
+        timeout=5,
+    )
+    if exhausted:
+        paused_after_receipt = command("resume", str(run), expect=2)
+        assert (paused_after_receipt["status"], paused_after_receipt["dispatched"]) == ("subscription-paused", 1)
+        assert paused_after_receipt["classification"]["route_id"] == "small"
+        completed = update_intake(workspace, {"allowance": "available"})
+    else:
+        completed = command("resume", str(run))
+    assert (completed["status"], completed["dispatched"]) == ("complete", 3)
+    assert completed["classification"]["intake_revision"] == paused["intake_revision"]
+    assert completed["retries"]["recorded"] == 0
+    assert state(run)["budget_extensions"] == [{"after_dispatch": 1, "total": 3}]
+    attempt = command("telemetry", str(run))["usage"]["attempts"][0]
+    assert attempt["receipt_source"] == "late-receipt"
 
 
 def test_code_recovers_receipt_without_redispatch_and_enforces_budget(workspace, monkeypatch):
@@ -651,16 +1211,32 @@ def test_source_only_check_can_explicitly_require_intake(workspace):
     assert result["verification"][0]["references"][0]["source"] == "intake"
 
 
-def test_repair_keeps_earlier_verdicts_bound_to_the_first_snapshot(workspace):
+@pytest.mark.parametrize("raw_intake", [False, True], ids=["structured", "raw-intake"])
+def test_repair_keeps_earlier_verdicts_bound_to_the_first_snapshot(workspace, raw_intake):
     run = workspace / "run"
-    result = command(
-        *start_typed(workspace, "evidence-repair", budget=5), "--verify-worker", str(workspace / "fixture-worker")
-    )
+    if raw_intake:
+        paused = start_intake(workspace, {**CODE_INTAKE, "text": "intake-repair"}, expect=2)
+    else:
+        paused = command(
+            *start_typed(workspace, "evidence-repair"),
+            "--verify-worker",
+            str(workspace / "fixture-worker"),
+            expect=2,
+        )
+    assert (paused["status"], paused["phase"], paused["dispatched"]) == ("budget-exhausted", "build", 3)
+    assert not (run / "attempts" / "4").exists()
+
     first = json.loads((run / "attempts" / "3" / "job.json").read_text())
+    failed = json.loads((run / "attempts" / "3" / "receipt.json").read_text())
+    assert failed["checks"][0]["status"] == "fail"
+    assert paused["verification"] == failed["checks"]
+    assert paused["verification_artifact_sha256"] == failed["artifact_sha256"] == first["artifact_sha256"]
+
+    result = command("resume", str(run), "--budget", "5")
     repair = json.loads((run / "attempts" / "4" / "job.json").read_text())
     last = json.loads((run / "attempts" / "5" / "job.json").read_text())
-    assert repair["verification"][0]["status"] == "fail"
-    assert repair["verification_artifact_sha256"] == first["artifact_sha256"]
+    assert repair["verification"] == failed["checks"]
+    assert repair["verification_artifact_sha256"] == failed["artifact_sha256"]
     assert first["verification_id"] != last["verification_id"]
     assert first["artifact_sha256"] != last["artifact_sha256"]
     assert result["verification_artifact_sha256"] == last["artifact_sha256"] == result["artifact_sha256"]
@@ -1358,3 +1934,528 @@ def test_telemetry_records_an_unopenable_worker_log(workspace):
     attempt = command("telemetry", str(run))["usage"]["attempts"][1]
     assert attempt["process_outcome"] == "log-open-error"
     assert attempt["status"] == "no-receipt"
+
+
+SUBSCRIPTION_CODEX = r"""
+import json
+import os
+import sys
+from pathlib import Path
+
+root = Path(__file__).parent
+scenario = (root / "provider-scenario").read_text()
+trace = root / "provider-trace"
+args = sys.argv[1:]
+assert "OPENAI_API_KEY" not in os.environ and "OPENAI_BASE_URL" not in os.environ
+assert "ANTHROPIC_API_KEY" not in os.environ and "PYTHONPATH" not in os.environ
+assert 'model_provider="openai"' in args
+assert not any(setting.startswith("forced_login_method=") for setting in args)
+assert 'chatgpt_base_url="https://chatgpt.com/backend-api/"' in args
+assert 'openai_base_url="https://chatgpt.com/backend-api/codex"' in args
+if "app-server" in args:
+    assert args[-2:] == ["--listen", "stdio://"]
+    for line in sys.stdin:
+        request = json.loads(line)
+        method = request["method"]
+        with trace.open("a") as output:
+            output.write(method + "\n")
+        if method == "initialize":
+            result = {"userAgent": "fake"}
+        elif method == "initialized":
+            continue
+        elif method == "account/read":
+            assert request["params"] == {"refreshToken": False}
+            account = {"type": "chatgpt", "planType": "plus", "email": "PRIVATE_ACCOUNT_DETAIL"}
+            if scenario == "signed-out":
+                account = None
+            if scenario == "api-key-only":
+                account = {"type": "apiKey"}
+            result = {"account": account, "requiresOpenaiAuth": True}
+        elif method == "account/rateLimits/read":
+            base = {
+                "limitId": "codex",
+                "primary": {"usedPercent": 30},
+                "secondary": {"usedPercent": 55},
+                "credits": {"hasCredits": False, "unlimited": False},
+            }
+            limits = {"codex": base, "extra_model": {"primary": {"usedPercent": 20}}}
+            account_id = "PRIVATE_OTHER_ACCOUNT" if scenario == "different-account" else "PRIVATE_ACCOUNT_ID"
+            result = {
+                "ordinaryUsageAllowed": True, "rateLimits": base, "rateLimitsByLimitId": limits, "accountId": account_id,
+            }
+            if scenario == "unknown":
+                result["ordinaryUsageAllowed"] = None
+            if scenario == "credits-unknown":
+                del base["credits"]
+            if scenario in ("paid", "unlimited"):
+                base["credits"]["hasCredits" if scenario == "paid" else "unlimited"] = True
+            if scenario == "exhausted":
+                limits["extra_model"]["primary"]["usedPercent"] = 100
+            if scenario == "pause-before-verify" and "exec:route" in trace.read_text():
+                result["ordinaryUsageAllowed"] = False
+        else:
+            raise AssertionError(method)
+        print(json.dumps({"id": request["id"], "result": result}), flush=True)
+    sys.exit()
+
+assert args[:5] == ["--ask-for-approval", "never", "exec", "--sandbox", "read-only"]
+assert "--ephemeral" in args and "--ignore-user-config" in args and "--ignore-rules" not in args
+assert args[-1] == "-"
+packet = json.loads(sys.stdin.read().rsplit("\n\n", 1)[1])
+phase = packet.get("phase", "route")
+with trace.open("a") as output:
+    output.write("exec:" + phase + "\n")
+if scenario == "limit-on-exec":
+    print(json.dumps({"type": "turn.failed", "error": {
+        "message": "You've hit your usage limit. PRIVATE_PROVIDER_DETAIL"
+    }}))
+    sys.exit(1)
+if phase == "route":
+    assert set(packet) == {"intake", "answers", "routes"}
+    schema = json.loads(Path(args[args.index("--output-schema") + 1]).read_text())
+    assert not schema["additionalProperties"]
+    assert "small" in schema["properties"]["route_id"]["enum"]
+    assert schema["properties"]["subtype"]["type"] == ["string", "null"]
+    result = {"route_id": "small", "subtype": "code"}
+    if scenario == "malformed":
+        result["run_id"] = "forged"
+    elif scenario == "wrong-subtype":
+        result["subtype"] = "prd"
+    elif scenario == "defer":
+        result = {"route_id": None, "subtype": None}
+elif phase == "verify":
+    assert packet["verification_version"] == 2
+    assert packet["artifact_sha256"].keys() == {"availability.sql"}
+    assert Path("snapshot/availability.sql").is_file()
+    result = {
+        "status": "ok",
+        "verification_version": 2,
+        "verification_id": packet["verification_id"],
+        "artifact_sha256": packet["artifact_sha256"],
+        "checks": [{"id": "booking", "kind": "judgment", "status": "pass", "evidence": "Reviewed fixture"}],
+    }
+else:
+    raise AssertionError(phase)
+Path(args[args.index("--output-last-message") + 1]).write_text(json.dumps(result))
+print(json.dumps({"type": "turn.completed", "usage": {"input_tokens": 10, "output_tokens": 1}}))
+"""
+
+SUBSCRIPTION_CLAUDE = r"""
+import json
+import sys
+from pathlib import Path
+
+assert sys.argv[1:] == ["auth", "status", "--json"]
+scenario = Path(__file__).with_name("provider-scenario").read_text()
+result = {
+    "loggedIn": True, "authMethod": "claude.ai", "apiProvider": "firstParty", "subscriptionType": "max",
+    "orgId": "PRIVATE_CLAUDE_ORG", "email": "PRIVATE_CLAUDE_EMAIL",
+}
+if scenario == "signed-out":
+    result.update(loggedIn=False, authMethod="none")
+elif scenario == "unknown-plan":
+    result.update(subscriptionType=None)
+elif scenario == "alternate":
+    result.update(apiKeySource="PRIVATE_ACCOUNT_DETAIL")
+print(json.dumps(result))
+"""
+
+
+def subscription_provider(workspace, monkeypatch, name, scenario):
+    shim = workspace / name
+    stub = SUBSCRIPTION_CODEX if name == "codex" else SUBSCRIPTION_CLAUDE
+    shim.write_text(f"#!{sys.executable}\n" + stub)
+    shim.chmod(0o700)
+    monkeypatch.setenv("PATH", f"{workspace}{os.pathsep}{os.environ['PATH']}")
+    if name == "codex":
+        monkeypatch.setenv("CODEX_HOME", str(workspace / "codex-home"))
+        monkeypatch.setenv("OPENAI_API_KEY", "PRIVATE_ALTERNATE_CREDENTIAL")
+        monkeypatch.setenv("OPENAI_BASE_URL", "https://alternate.invalid")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "PRIVATE_OTHER_PROVIDER_CREDENTIAL")
+    else:
+        for name in tuple(os.environ):
+            if name.startswith(("ANTHROPIC_", "CLAUDE_CODE_USE_", "CLAUDE_CODE_OAUTH_TOKEN")):
+                monkeypatch.delenv(name)
+    control = workspace / "provider-scenario"
+    control.write_text(scenario)
+    return control
+
+
+def managed_intake_args(workspace, intake, *worker_flags):
+    path = workspace / "subscription-intake.json"
+    path.write_text(json.dumps(intake))
+    return ["start", str(workspace / "run"), "--intake", str(path), *worker_flags]
+
+
+@pytest.mark.parametrize(
+    ("scenario", "reason"),
+    [
+        ("signed-out", "auth-unavailable"),
+        ("api-key-only", "alternate-credentials"),
+        ("unknown", "allowance-unknown"),
+        ("credits-unknown", "allowance-unknown"),
+        ("paid", "paid-continuation-possible"),
+        ("unlimited", "paid-continuation-possible"),
+        ("exhausted", "allowance-exhausted"),
+    ],
+)
+def test_codex_subscription_preflight_blocks_without_an_attempt(workspace, monkeypatch, scenario, reason):
+    subscription_provider(workspace, monkeypatch, "codex", scenario)
+    executable = str(workspace / "fixture-worker")
+    args = managed_intake_args(
+        workspace, CODE_INTAKE, "--codex", "--native-worker", executable, "--verify-worker", executable
+    )
+    result = command(*args, "--confirm-plan-only", expect=2)
+    assert result["status"] == "subscription-paused"
+    assert result["subscription_pause"] == {"host": "codex", "reason": reason}
+    assert result["dispatched"] == 0 and result["budget"] == 3
+    assert "exec:" not in (workspace / "provider-trace").read_text()
+    assert "PRIVATE_ACCOUNT_DETAIL" not in json.dumps(result)
+    assert not list((workspace / "run" / "attempts").iterdir())
+
+
+def test_codex_subscription_routes_once_after_confirmation(workspace, monkeypatch):
+    subscription_provider(workspace, monkeypatch, "codex", "ready")
+    run = workspace / "run"
+    executable = str(workspace / "fixture-worker")
+    args = managed_intake_args(
+        workspace, CODE_INTAKE, "--codex", "--native-worker", executable, "--verify-worker", executable
+    )
+    result = command(*args, expect=2)
+    assert result["subscription_pause"]["reason"] == "plan-only-unconfirmed"
+    assert result["dispatched"] == 0
+    assert not (workspace / "provider-trace").exists()
+    run_id = state(run)["run_id"]
+
+    result = command("resume", str(run), "--confirm-plan-only")
+    assert result["status"] == "complete" and result["dispatched"] == 3
+    assert result["usage"]["observed_events"] == 1
+    assert state(run)["run_id"] == run_id
+    assert state(run)["request"]["checks"] == CODE_INTAKE["checks"]
+    trace = (workspace / "provider-trace").read_text().splitlines()
+    assert trace == ["initialize", "initialized", "account/read", "account/rateLimits/read", "exec:route"]
+    attempt_path = run / "attempts" / "1"
+    raw = json.loads((attempt_path / "receipt.json").read_text())
+    assert raw == {
+        "status": "ok",
+        "route_id": "small",
+        "subtype": "code",
+        "run_id": run_id,
+        "attempt": 1,
+        "intake_revision": 1,
+    }
+
+    state_path = run / "state.json"
+    telemetry_path = run / "telemetry.json"
+    saved = state_path.read_bytes()
+    sidecar = telemetry_path.read_bytes()
+    assert state(run)["subscription_account"]
+    assert command("resume", str(run), "--confirm-plan-only") == result
+    assert state_path.read_bytes() == saved
+    assert telemetry_path.read_bytes() == sidecar
+
+    # Repeat against a completed run whose diagnostic predates intake checkpoints.
+    older_state = json.loads(saved)
+    del older_state["intake_history"]
+    del older_state["intake_catalog_version"]
+    older_telemetry = json.loads(sidecar)
+    del older_telemetry["intake"]
+    saved = json.dumps(older_state).encode()
+    sidecar = json.dumps(older_telemetry).encode()
+    state_path.write_bytes(saved)
+    telemetry_path.write_bytes(sidecar)
+    assert command("resume", str(run), "--confirm-plan-only") == result
+    assert state_path.read_bytes() == saved
+    assert telemetry_path.read_bytes() == sidecar
+    assert (workspace / "provider-trace").read_text().splitlines() == trace
+    assert command("resume", str(run)) == result
+    assert json.loads((run / "telemetry.json").read_text())["intake"]["route_id"] == "small"
+    assert (workspace / "provider-trace").read_text().splitlines() == trace
+
+
+@pytest.mark.parametrize("scenario", ["malformed", "wrong-subtype", "defer", "limit-on-exec"])
+def test_codex_subscription_validates_model_decisions_and_does_not_dispatch_again(workspace, monkeypatch, scenario):
+    control = subscription_provider(workspace, monkeypatch, "codex", scenario)
+    executable = str(workspace / "fixture-worker")
+    run = workspace / "run"
+    args = managed_intake_args(
+        workspace,
+        CODE_INTAKE,
+        "--codex",
+        "--native-worker",
+        executable,
+        "--verify-worker",
+        executable,
+        "--confirm-plan-only",
+    )
+    result = command(*args, expect=2)
+    assert result["dispatched"] == 1
+    assert "PRIVATE_PROVIDER_DETAIL" not in json.dumps(result)
+    assert "PRIVATE_PROVIDER_DETAIL" not in (run / "attempts" / "1" / "worker.log").read_text()
+    if scenario == "limit-on-exec":
+        assert result["subscription_pause"] == {"host": "codex", "reason": "allowance-exhausted"}
+        control.write_text("ready")
+        still_paused = command("resume", str(run), expect=2)
+        assert still_paused["subscription_pause"] == result["subscription_pause"]
+        assert still_paused["dispatched"] == 1
+        assert (workspace / "provider-trace").read_text().splitlines().count("exec:route") == 1
+    elif scenario == "defer":
+        assert result["intake_gate"]["code"] == "classification-deferred"
+    else:
+        assert result["status"] == "interrupted"
+        assert not (run / "attempts" / "1" / "receipt.json").exists()
+
+
+def test_codex_subscription_resume_keeps_the_accepted_request_and_build(workspace, monkeypatch):
+    control = subscription_provider(workspace, monkeypatch, "codex", "pause-before-verify")
+    run = workspace / "run"
+    intake = {**CODE_INTAKE, "checks": {"booking": TYPED_CHECKS["decision"]}}
+    result = command(
+        *managed_intake_args(
+            workspace, intake, "--codex", "--native-worker", str(workspace / "fixture-worker"), "--confirm-plan-only"
+        ),
+        expect=2,
+    )
+    assert result["subscription_pause"]["reason"] == "allowance-exhausted"
+    assert result["phase"] == "verify" and result["dispatched"] == 2 and result["budget"] == 3
+    saved = state(run)
+    built = (run / "attempts" / "2" / "receipt.json").read_bytes()
+    assert not (run / "attempts" / "3").exists()
+
+    control.write_text("ready")
+    result = command("resume", str(run))
+    recovered = state(run)
+    assert result["status"] == "complete" and result["dispatched"] == 3
+    assert recovered["run_id"] == saved["run_id"] and recovered["request"] == saved["request"]
+    assert (run / "attempts" / "2" / "receipt.json").read_bytes() == built
+    assert recovered["artifact_sha256"] == saved["attempts"][1]["artifact_sha256"]
+    assert (workspace / "provider-trace").read_text().splitlines().count("exec:route") == 1
+
+
+def test_codex_subscription_account_switch_requires_fresh_confirmation(workspace, monkeypatch):
+    control = subscription_provider(workspace, monkeypatch, "codex", "pause-before-verify")
+    run = workspace / "run"
+    intake = {**CODE_INTAKE, "checks": {"booking": TYPED_CHECKS["decision"]}}
+    paused = command(
+        *managed_intake_args(
+            workspace, intake, "--codex", "--native-worker", str(workspace / "fixture-worker"), "--confirm-plan-only"
+        ),
+        expect=2,
+    )
+    assert paused["phase"] == "verify" and paused["dispatched"] == 2
+    accepted = state(run)["request"]
+    control.write_text("different-account")
+    changed = command("resume", str(run), expect=2)
+    assert changed["subscription_pause"] == {"host": "codex", "reason": "account-changed"}
+    assert changed["dispatched"] == 2
+    assert "PRIVATE_OTHER_ACCOUNT" not in json.dumps(changed)
+    assert "PRIVATE_OTHER_ACCOUNT" not in (run / "telemetry.json").read_text()
+    result = command("resume", str(run), "--confirm-plan-only")
+    assert result["status"] == "complete" and result["dispatched"] == 3
+    assert state(run)["request"] == accepted
+
+
+def test_plan_only_confirmation_refreshes_allowance_after_manual_freeze(workspace, monkeypatch):
+    subscription_provider(workspace, monkeypatch, "codex", "ready")
+    run = workspace / "run"
+    intake = {
+        **CODE_INTAKE,
+        "route_id": "small",
+        "subtype": "code",
+        "allowance": "exhausted",
+        "budget": 2,
+        "checks": {"booking": TYPED_CHECKS["decision"]},
+    }
+    paused = command(
+        *managed_intake_args(
+            workspace, intake, "--codex", "--native-worker", str(workspace / "fixture-worker"), "--confirm-plan-only"
+        ),
+        expect=2,
+    )
+    assert paused["status"] == "subscription-paused" and paused["phase"] == "verify"
+    assert paused["subscription_pause"]["reason"] == "allowance-exhausted"
+    assert paused["dispatched"] == 1 and not paused["canonical_request_pending"]
+    assert not (workspace / "provider-trace").exists()
+    saved = state(run)
+
+    resumed = command("resume", str(run), "--confirm-plan-only")
+    assert resumed["status"] == "complete" and resumed["dispatched"] == 2
+    assert state(run)["intake"] == saved["intake"]
+    assert state(run)["request"] == saved["request"]
+    assert resumed["artifact_sha256"] == saved["attempts"][0]["artifact_sha256"]
+    assert (workspace / "provider-trace").read_text().splitlines()[-1] == "exec:verify"
+
+
+@pytest.mark.parametrize(
+    ("scenario", "reason"),
+    [("signed-out", "auth-unavailable"), ("unknown-plan", "auth-unavailable"), ("alternate", "alternate-credentials")],
+)
+def test_claude_subscription_preflight_requires_first_party_subscription(workspace, monkeypatch, scenario, reason):
+    subscription_provider(workspace, monkeypatch, "claude", scenario)
+    result = command(
+        *managed_intake_args(
+            workspace,
+            CODE_INTAKE,
+            "--intake-host",
+            "claude",
+            "--verify-worker",
+            str(workspace / "fixture-worker"),
+            "--confirm-plan-only",
+        ),
+        expect=2,
+    )
+    assert result["subscription_pause"] == {"host": "claude", "reason": reason}
+    assert result["dispatched"] == 0 and result["budget"] == 3
+
+
+def test_claude_subscription_workspace_receipts_and_local_checker(workspace, monkeypatch):
+    subscription_provider(workspace, monkeypatch, "claude", "ready")
+    run = workspace / "run"
+    job = run / "attempts" / "1" / "job.json"
+    executable = str(workspace / "fixture-worker")
+    args = managed_intake_args(
+        workspace,
+        CODE_INTAKE,
+        "--intake-host",
+        "claude",
+        "--verify-worker",
+        executable,
+        "--native-worker",
+        executable,
+        "--confirm-plan-only",
+    )
+    with launch(*args) as controller:
+        wait_for(job)
+        active = command("status", str(run))
+        assert active["pending_attempt"]["subscription_host"] == "claude"
+        assert "Classify the pending intake" in active["next_action"]
+        assert "unknown intake subtype" in native_host(
+            "classify", job, "--route", "small", "--subtype", "prd", expected=1
+        )
+        assert not job.with_name("receipt.json").exists()
+        native_host("classify", job, "--route", "small", "--subtype", "code")
+        assert native_host("classify", job, "--defer", expected=1)
+        stdout, stderr = controller.communicate(timeout=10)
+        assert controller.returncode == 0, (stdout, stderr)
+    result = json.loads(stdout)
+    assert result["status"] == "complete" and result["dispatched"] == 3
+    assert result["usage"]["attempts"][0]["worker"] == "native-host"
+    assert result["usage"]["attempts"][2]["worker"] == "independent-checker"
+    assert state(run)["request"]["checks"] == CODE_INTAKE["checks"]
+
+
+def test_claude_subscription_pause_can_fall_back_to_local_workers(workspace, monkeypatch):
+    subscription_provider(workspace, monkeypatch, "claude", "ready")
+    run = workspace / "run"
+    job = run / "attempts" / "1" / "job.json"
+    executable = str(workspace / "fixture-worker")
+    args = managed_intake_args(
+        workspace,
+        CODE_INTAKE,
+        "--intake-host",
+        "claude",
+        "--verify-worker",
+        executable,
+        "--native-host",
+        "--confirm-plan-only",
+    )
+    with launch(*args) as controller:
+        wait_for(job)
+        native_host("subscription-pause", job, "--reason", "allowance-unknown")
+        stdout, stderr = controller.communicate(timeout=10)
+        assert controller.returncode == 2, (stdout, stderr)
+    paused = json.loads(stdout)
+    assert paused["subscription_pause"] == {"host": "claude", "reason": "allowance-unknown"}
+    assert paused["dispatched"] == 1 and paused["budget"] == 3
+    run_id = state(run)["run_id"]
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "PRIVATE_ALTERNATE_CREDENTIAL")
+    updates = workspace / "owner-route.json"
+    updates.write_text('{"route_id":"small","subtype":"code"}')
+    result = command("resume", str(run), "--intake-update", str(updates), "--native-worker", executable)
+    assert result["status"] == "complete" and result["dispatched"] == 3
+    assert result["classification"]["source"] == "owner"
+    assert state(run)["run_id"] == run_id
+
+
+def test_claude_subscription_paused_retry_still_adopts_a_late_receipt(workspace, monkeypatch):
+    control = subscription_provider(workspace, monkeypatch, "claude", "ready")
+    run = workspace / "run"
+    job = run / "attempts" / "1" / "job.json"
+    executable = str(workspace / "fixture-worker")
+    args = managed_intake_args(
+        workspace,
+        {**CODE_INTAKE, "timeout_seconds": 5},
+        "--intake-host",
+        "claude",
+        "--verify-worker",
+        executable,
+        "--native-worker",
+        executable,
+        "--confirm-plan-only",
+    )
+    interrupted = command(*args, expect=2)
+    assert interrupted["status"] == "interrupted" and interrupted["pending_attempt"]["number"] == 1
+    revision = state(run)["intake_revision"]
+    updated = update_intake(workspace, {"allowance": "exhausted"}, expect=2)
+    assert updated["pending_attempt"]["number"] == 1
+    assert state(run)["intake_revision"] == revision
+    extended = update_intake(workspace, {"allowance": "available", "budget": 4}, expect=2)
+    assert extended["pending_attempt"]["number"] == 1
+    assert extended["dispatched"] == 1 and extended["budget"] == 4
+    assert state(run)["intake_revision"] == revision
+    assert state(run)["budget_extensions"] == [{"after_dispatch": 1, "total": 4}]
+    control.write_text("signed-out")
+    paused = command("resume", str(run), "--retry", expect=2)
+    assert paused["subscription_pause"]["reason"] == "auth-unavailable"
+    assert paused["dispatched"] == 1 and paused["pending_attempt"]["number"] == 1
+
+    control.write_text("ready")
+    updated = update_intake(workspace, {"budget": 4, "allowance": "available"}, expect=2)
+    assert updated["dispatched"] == 1 and updated["pending_attempt"] == paused["pending_attempt"]
+    extended = command("resume", str(run), "--budget", "5", expect=2)
+    assert extended["dispatched"] == 1 and extended["pending_attempt"] == paused["pending_attempt"]
+    native_host("classify", job, "--route", "small", "--subtype", "code")
+    result = command("resume", str(run))
+    assert result["status"] == "complete" and result["dispatched"] == 3
+    telemetry = command("telemetry", str(run))
+    assert telemetry["usage"]["attempts"][0]["receipt_source"] == "late-receipt"
+
+
+def test_claude_subscription_pause_after_route_preserves_the_accepted_plan(workspace, monkeypatch):
+    subscription_provider(workspace, monkeypatch, "claude", "ready")
+    run = workspace / "run"
+    route_job = run / "attempts" / "1" / "job.json"
+    build_job = run / "attempts" / "2" / "job.json"
+    executable = str(workspace / "fixture-worker")
+    args = managed_intake_args(
+        workspace,
+        {**CODE_INTAKE, "budget": 4},
+        "--intake-host",
+        "claude",
+        "--verify-worker",
+        executable,
+        "--native-host",
+        "--confirm-plan-only",
+    )
+    with launch(*args) as controller:
+        wait_for(route_job)
+        native_host("classify", route_job, "--route", "small", "--subtype", "code")
+        wait_for(build_job)
+        packet = json.loads(build_job.read_text())
+        assert packet["subscription_host"] == "claude" and packet["native_workflow"] == "bmad-build-auto"
+        native_host("subscription-pause", build_job, "--reason", "allowance-exhausted")
+        stdout, stderr = controller.communicate(timeout=10)
+        assert controller.returncode == 2, (stdout, stderr)
+
+    paused = json.loads(stdout)
+    saved = state(run)
+    assert paused["phase"] == "build" and paused["dispatched"] == 2
+    assert paused["subscription_pause"]["reason"] == "allowance-exhausted"
+    assert not paused["canonical_request_pending"] and saved["plan_only_confirmed"] is False
+    assert command("resume", str(run), expect=2)["dispatched"] == 2
+
+    result = command("resume", str(run), "--native-worker", executable)
+    completed = state(run)
+    assert result["status"] == "complete" and result["dispatched"] == 4
+    for field in ("run_id", "request", "execution_plan"):
+        assert completed[field] == saved[field]

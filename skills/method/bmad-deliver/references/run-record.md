@@ -14,6 +14,14 @@ Native delivery covers these workflows. Review supports their internal steps. Fo
 
 The controller publishes run-local UTF-8 text files under `artifacts/`. Each complete serialized JSON receipt can be at most 4 MiB, including all artifact contents, paths, and metadata in that receipt. The native helper checks the exact encoded size before submission. Reduce the text or omit optional outputs when the helper reports an oversized receipt. The `--codex` adapter reads up to 8 MiB per job. When it verifies a mixed run, the job includes both builds' artifacts, the original request, and job metadata. Size the combined output for that limit. Binary deliverables, deployment, and integration into an existing worktree require a separate workflow.
 
+## Pin the runtime for saved runs
+
+Verify each portable or standalone ZIP against its separately published SHA-256 digest before extracting it into its own directory. The extracted standalone archive also includes `SHA256SUMS` for checking its contents. The portable plugin places the skill under `skills/bmad-deliver/`. Run `scripts/check_install.py` from the extracted skill for the release you are verifying.
+
+Starting with v0.4.0, `deliver.py --version` reports the controller release and `assets/native/SOURCE.json` records `release_version` and the pinned inputs. For v0.3.0, identify the release by the root `plugin.json` in the verified portable archive.
+
+Install each release in a separate project or worktree and keep its installed path available. Saved worker paths are absolute. v0.4.0 can resume v0.3.0 structured runs while preserving their existing protocols. Use v0.4.0 for raw-intake states. v0.3.0 refuses their newer attempt protocol. To roll back new starts, reopen the project with the verified v0.3.0 installation. Keep v0.4.0 available at its existing path for its saved runs.
+
 ## Start, inspect, and resume
 
 Use a new run directory whose parent already exists. For a native run, start the controller in the background so the workspace agent can [serve its jobs](native-host.md). The commands below assume the project has an installed skill and a `request.json` file. In a source checkout, set `delivery` to `skills/method/bmad-deliver/scripts/deliver.py`.
@@ -34,6 +42,85 @@ python3 "$delivery" resume _bmad-output/check-in-run &
 Choose `--codex` or `--worker /path/to/trusted-executable` to supply a worker, including when using native builds. `--codex` requires the `codex` executable on `PATH` and a configured provider. It opens a fresh read-only session for each stage it handles. Use source material authorized for that provider. Add `--model` or `--effort` when supported by the provider.
 
 The controller dispatches verification after the native builds. Use `--verify-worker /path/to/trusted-checker` for typed executable checks. The trusted local checker receives the job and receipt paths, exercises the artifact snapshot with the required runtime, and consumes one dispatch.
+
+### Subscription-backed intake
+
+Use the signed-in subscription session you already use for workspace delivery. `--codex` is the supported subscription intake launcher. The Codex classifier has signed-in routing smoke evidence. `--intake-host claude` is a Claude Code workspace preview with deterministic evidence only. Both enter the saved `route` phase with the same intake envelope. Each model classifier decision consumes one controller dispatch. [Release evidence](evaluate-delivery.md#v040-release-evidence) · [Codex authentication](https://learn.chatgpt.com/docs/auth) · [Claude Code authentication](https://code.claude.com/docs/en/authentication)
+
+Before using `--confirm-plan-only`, verify available included allowance on the selected account. For Codex, confirm that the account has no purchased-credit balance and that automatic reload is off. For Claude, turn off usage credits. For a workspace-hosted phase, check the actual serving session and the settings its review agents use. The controller checks Codex account and quota data before model-backed dispatch. Claude workspace intake checks local first-party subscription sign-in and relies on the serving workspace’s current allowance check. [Codex credits](https://help.openai.com/en/articles/12642688-using-credits-for-flexible-usage-in-chatgpt-personal-plans) · [Claude usage credits](https://support.claude.com/en/articles/12429409-manage-usage-credits-for-paid-claude-plans)
+
+Select one launch command. In a source checkout, set `delivery` to `skills/method/bmad-deliver/scripts/deliver.py`.
+
+```bash
+python3 "$delivery" start "$RUN" --intake intake.json --codex --native-host \
+  --verify-worker /path/to/local-checker --confirm-plan-only &
+
+python3 "$delivery" start "$RUN" --intake intake.json --intake-host claude --native-host \
+  --verify-worker /path/to/local-checker --confirm-plan-only &
+```
+
+Run the command that matches your host, then use `status` to find its pending job or gate. With Codex, `--model` and `--effort` use the CLI's supported options. In a Claude workspace, choose the model and effort in the serving session. Follow the [workspace host instructions](native-host.md) to serve Claude classification and native build jobs. An independent checker keeps verification local. Codex can also verify source-inspection and judgment checks through the guarded subscription adapter.
+
+At `subscription-paused`, read the fixed reason in status and resume the saved run when the subscription is available. Use `resume "$RUN" --confirm-plan-only` after verifying the account settings. A preflight pause consumes zero dispatches. A provider allowance refusal after a dispatch remains counted and requires fresh confirmation before another model-backed dispatch. A detectable subscription account change also requires fresh confirmation. Keep controller call limits and subscription allowance separate.
+
+Before the request freezes, a manual intake update with `route_id` and `subtype` can skip classification. For a fully local continuation use trusted native and verification workers. At a managed subscription pause, `resume --native-worker PATH` can replace an unavailable workspace build host, or `resume --verify-worker PATH` can supply a local verifier when one is missing. The controller retains the approved request and completed artifacts.
+
+### Offline raw intake
+
+The source controller can open a saved run before the structured delivery request is complete. Use `--intake FILE` for this path, or `--request FILE` for the existing structured path. For offline verification of the intake contract, provide a trusted local classifier and a trusted native worker. A manual route can start with a trusted native worker and verifier, with no classifier.
+
+```bash
+delivery="$PWD/skills/method/bmad-deliver/scripts/deliver.py"
+python3 "$delivery" start "$RUN" --intake intake.json \
+  --worker /path/to/local-classifier --native-worker /path/to/local-native-worker \
+  --verify-worker /path/to/local-checker
+python3 "$delivery" status "$RUN"
+python3 "$delivery" resume "$RUN" --intake-update owner-update.json
+python3 "$delivery" resume "$RUN" --approve "$PROPOSAL_ID"
+```
+
+An intake file can contain plain UTF-8 text or a JSON envelope of up to 512 KiB. Supply the owner-agreed limits, output, typed checks, and budget when they are known. This example takes the owner-selected Product Brief route.
+
+```json
+{
+  "text": "Write a Product Brief for a library booking trial. The simulation excluded false releases.",
+  "route_id": "thinking",
+  "subtype": "product-brief",
+  "authority": {
+    "mode": "C",
+    "outcome": "Decide whether to trial a library booking policy",
+    "deliverable": "Library booking Product Brief",
+    "limits": ["Preserve the simulation's limitation"]
+  },
+  "checks": {
+    "limitation": {
+      "kind": "source-inspection",
+      "behavior": "State that the simulation excluded false releases"
+    }
+  },
+  "budget": 2
+}
+```
+
+The classifier spends one dispatch in `route`. An explicit owner route and subtype can skip that dispatch. The controller maps the accepted classification to a [catalog entry](intake-routes.json), checks that its native workflows are available, and applies the owner's authority before saving the canonical request and its typed acceptance checks. Build and verification then continue in the same run.
+
+The executable catalog entries cover run-local code, Product Briefs, and approved code with a Product Brief. Other entries remain available for classification and appear as `capability-unavailable` when their handler is missing.
+
+Supply the intended output class in `kind` when it is known. The owner can explicitly choose the route and subtype or approve the proposed plan when the classifier supplies a choice that the existing owner fields do not authorize. The name `Product Brief` identifies the standalone brief. A mixed contract can name its deliverable as the code output followed by `and Product Brief`.
+
+Use the saved status to see the current revision, decision, and proposal. Supply a positive call budget and a timeout of 1 to 86,400 seconds. The timeout defaults to 600 seconds.
+
+For missing structured fields or an explicit route correction, supply an owner update file before canonical freeze. If status asks only for a subtype, the owner update can supply just `subtype` for the selected route. Use `--approve` with the current proposal ID if the gate requests approval. An update invalidates the prior proposal.
+
+Use `--budget` when an existing run needs a higher dispatch cap. An explicit `allowance` of `unknown` or `exhausted` pauses routing until the owner confirms `available` in an update. The numerical dispatch cap applies independently of provider allowance.
+
+If a pending intake stops because a native worker or verifier is missing, attach it with `resume --native-worker PATH`, `resume --native-host`, or `resume --verify-worker PATH`, as applicable. The controller takes executable paths from the command line.
+
+An owner-supplied source entry uses an opaque `id` and an authorized `excerpt`. Set `readable: false` if the material still needs preparation. Use an update file to replace the source list with the prepared excerpts. The router consumes supplied text and source excerpts. Preparing or retaining original documents or recordings requires a separate capability.
+
+A classifier receives the job and receipt paths in the same way as other trusted workers. Its `phase: route` job carries `intake_version: 1`, the saved material, owner answers, and the catalog choices under `routes`. For a decision, return `status: ok`, copy `run_id`, `attempt`, and `intake_revision` from the job, and supply a catalog `route_id` and an optional `subtype` from that route. To defer and ask the owner for clarification, set `route_id` to `null` and omit `subtype`. The controller validates the receipt and derives any workflow steps from the catalog.
+
+Raw states use `attempt_version: 2`. Use a controller that supports this protocol to resume them. Structured runs keep their existing state and worker protocols. Share only the exported telemetry with support agents. Keep the private intake, source excerpts, owner answers, classifier jobs, and receipts in the run directory.
 
 ### Usage and support
 
@@ -61,13 +148,17 @@ For an interrupted or active run, or a run created with an older version, export
 python3 "$delivery" telemetry _bmad-output/check-in-run > delivery-telemetry.json
 ```
 
+For raw runs, `intake` shows the current catalog route and subtype, decision source, intake revision, and any fixed gate and reason. `intake.history` keeps the latest 128 recorded changes, including route corrections and provider pauses. Each entry reports the phase and how many attempts had been dispatched at that point. Join that count with `usage.attempts` to follow retries and late receipts. A count of zero records an event before the first dispatch.
+
+`history_truncated` tells you when earlier diagnostic entries have rolled out of that history. Older runs can have `null` intake fields and an empty history. In that case use the available attempt and verification metadata to diagnose recovery.
+
 Use `usage.attempts` to follow controller dispatches in order. `process_outcome` distinguishes a worker exit, timeout, interruption, launch error, or inability to open the worker log. `status` describes the receipt decision. A successful verification receipt can still contain failing checks. `verification` preserves the verdict counts for each recorded verification. `gate` identifies the last owner decision or recovery pause recorded on that attempt. `receipt_source` distinguishes ordinary adoption, adoption on controller resume, and a receipt accepted after absence was recorded. `receipt_missing_after_seconds` retains when absence was recorded, even after late adoption. `budget_extensions` records the totals and dispatch counts when the owner extended the cap. Missing fields from older runs remain unknown or `null`.
 
 When the controller can read provider counters, the exported usage reports their coverage. Native subagent usage may remain unavailable. File writes are best effort, so if a run stops between saving state and writing the diagnostic, use the export command to read its current state.
 
 ### What workers receive
 
-Every dispatched job contains the original request and checks, accumulated owner answers, the current route, any saved artifacts and verification feedback, and the remaining budget and timeout.
+Every structured delivery job contains the original request and checks, accumulated owner answers, the current route, any saved artifacts and verification feedback, and the remaining budget and timeout.
 
 | Worker | Access to the job |
 | --- | --- |
@@ -149,23 +240,25 @@ An allowlisted deliverable can proceed automatically. Without a name allowlist, 
 | --- | --- |
 | `dispatched` | Use the pending job path to serve a workspace-hosted workflow. If the controller stopped, resume the saved run. |
 | `approval-required` | Review the route and use `resume --approve PROPOSAL_ID` when the owner approves it. |
-| `answer-required` | Use `resume --answer 'OWNER ANSWER'` once the owner supplies the answer. |
+| `answer-required` | Use `resume --answer 'OWNER ANSWER'` for an owner question or `resume --intake-update FILE` for structured intake fields. |
+| `capability-unavailable` | Inspect the selected route. An owner intake update can select a supported route. Resume with the trusted native or verification worker flag if a worker is missing. |
+| `subscription-paused` | If the intake is pending and needs an allowance update, use `resume --intake-update FILE` to record the owner's confirmed allowance. If the request is frozen, use the [managed subscription resume](#subscription-backed-intake) with `resume "$RUN" --confirm-plan-only` after verifying the account settings. |
 | `interrupted` | Use a bare resume to adopt a saved late receipt. Use `resume --retry` to request a new attempt. |
 | `checker-fault` | Repair the checker and use `resume --reverify` to check the saved build. Add `--budget NEW_TOTAL` if the current budget is exhausted. |
 | `budget-exhausted` | Use `resume --budget NEW_TOTAL` after the owner extends the cap. |
 | `complete` | Read the files under `artifacts/` and the verification results from `status`. |
 
-A bare resume reuses committed receipts and advances stages with available budget. If a valid late receipt has already committed, even `resume --retry` adopts that receipt first. If retry wins and has budget, it closes the old attempt to further submission. At the cap the pending attempt can still accept its receipt. Extending the budget rechecks that attempt before starting a replacement. Each new dispatch uses one unit, including verification, failed attempts, and retries. A native run needs three dispatches for code or documents, or four for mixed delivery, when every stage succeeds on its first attempt. The runner enforces the call cap before dispatch and a per-call timeout. Billed tokens are provider usage. The call cap is independent of token count.
+A bare resume reuses committed receipts and advances stages with available budget. An owner update limited to the worker-call budget or allowance preserves any pending receipt and its intake revision. If a valid late receipt has already committed, even `resume --retry` adopts that receipt first. If retry wins and has budget, it closes the old attempt to further submission. At the cap the pending attempt can still accept its receipt. Extending the budget rechecks that attempt before starting a replacement. Each new dispatch uses one unit, including verification, failed attempts, and retries. A native run needs three dispatches for code or documents, or four for mixed delivery, when every stage succeeds on its first attempt. The runner enforces the call cap before dispatch and a per-call timeout. Billed tokens are provider usage. The call cap is independent of token count.
 
 A declared checker fault pauses in verification until the checker is repaired. Re-verification uses the same saved build. For older independent checker receipts that reported a failure as an artifact verdict, `resume --reverify --budget NEW_TOTAL` remains available after the run stops at its cap. Verification failure or inapplicability leaves the check open and the controller allocates a repair attempt if budget remains. It publishes only when every check passes and, in version 2, the files match the verified hashes.
 
 ## Persisted record and worker interface
 
-The run contains a versioned `state.json`, `attempts/<number>/job.json`, the worker log and any committed `receipt.json`. State stores the original request, current budget and its extensions, phase, dispatches, owner answers and approvals, B replacements, verification results and published file hashes. An owner-approved Mode B replacement records its proposal ID in `approval`. The run lock covers controller writes and a subprocess that outlives the controller. Status reads the atomically replaced state without taking that lock. `attempt_version: 1` identifies the receipt and retry protocol. Existing records gain the marker on the next controller save. An attempt retired by retry while still missing its receipt is marked `superseded`.
+The run contains a versioned `state.json`, `attempts/<number>/job.json`, the worker log and any committed `receipt.json`. State stores the original request, current budget and its extensions, phase, dispatches, owner answers and approvals, B replacements, verification results and published file hashes. An owner-approved Mode B replacement records its proposal ID in `approval`. The run lock covers controller writes and a subprocess that outlives the controller. Status reads the atomically replaced state without taking that lock. Structured runs use `attempt_version: 1` for receipt and retry. Older structured records gain the marker on the next controller save. An attempt retired by retry while still missing its receipt is marked `superseded`.
 
 A trusted worker receives two arguments, the absolute job path and absolute receipt path, and runs in the attempt directory. It reads the job and writes a single JSON receipt using a temporary file, fsync and atomic rename. Integrations that submit receipts outside the worker process use `commit_receipt(job_path, result)` from `deliver.py` to coordinate with retry. Treat the executable and its provider as part of the trusted environment. Limit effects to this delivery.
 
-The job has these fields at every phase:
+Structured delivery jobs have these fields:
 
 | Key | Value |
 | --- | --- |

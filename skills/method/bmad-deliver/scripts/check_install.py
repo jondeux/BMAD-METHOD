@@ -38,7 +38,7 @@ def platform_issues(*, native=False, codex=False):
 
 def check_files(skill):
     try:
-        from bundle_layout import SKILL, historical_inputs, worktree_inputs
+        from bundle_layout import RELEASE_VERSION, SKILL, historical_inputs, worktree_inputs
     except ImportError as exc:
         raise ValueError("The checker is missing its bundle layout. Run it from a complete candidate bundle.") from exc
 
@@ -52,6 +52,11 @@ def check_files(skill):
         raise ValueError("Legacy beta install. Keep it for its saved runs and install the candidate side by side.")
     if type(manifest.get("manifest_version")) is not int or manifest["manifest_version"] != 1:
         raise ValueError("Unsupported beta source manifest. Use the compatibility checker from the matching bundle.")
+    if manifest.get("release_version") != RELEASE_VERSION:
+        raise ValueError(
+            f"This compatibility checker requires Delivery Beta v{RELEASE_VERSION}. "
+            "Use the original checker from the bundle that installed this runtime."
+        )
     files = manifest.get("files")
     expected = {"INSTALL.md", *worktree_inputs(), *historical_inputs()}
     if not isinstance(files, dict) or files.keys() != expected:

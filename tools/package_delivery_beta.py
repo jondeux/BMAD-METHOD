@@ -11,20 +11,25 @@ import json
 import os
 import subprocess
 import tempfile
+from io import BytesIO
 from pathlib import Path
 from zipfile import ZIP_STORED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_MANIFEST = "bmad-deliver/assets/native/SOURCE.json"
 BRIEF_REVISION = "f033e70a2c0a3751aaab17dfdd29839ac621f541"
+PORTABLE_BASELINE = ".ai-context/delivery-beta/autonomous-delivery-beta-0.3.0.zip"
+PORTABLE_BASELINE_SHA256 = "2592542ae305445346261cf55cd88d986f9559e0ec29c8fdb2f7748cd7679a2c"
 
 INSTALL = """# Install the local BMad delivery beta
 
 Use Python 3.11 or later on a POSIX host. Native delivery needs `uv` for workflow
 dependencies and an authorized workspace agent with access to the project, native
 workflow tools, and review subagents. Start native runs from that agent so it can
-serve each build job. The standard `--codex` launcher needs the `codex` executable
-on `PATH` and a configured model provider. Native preparation writes the requested
+serve each build job. The standard `--codex` intake launcher uses the `codex`
+executable on `PATH` and a signed-in subscription. Signed-in routing was tested
+with Codex. Claude Code workspace intake is a preview with deterministic checks
+only. Native preparation writes the requested
 communication and document languages to the job configuration. Both default
 to English.
 
@@ -44,10 +49,11 @@ native workflow need a separately agreed route or deliverable before dispatch.
 
 ## Install the skill
 
-Extract the ZIP to a new directory. Use `sha256sum -c SHA256SUMS` there to verify
-the manifest, or `shasum -a 256 -c SHA256SUMS` if your host has `shasum`. Run the
-read-only compatibility checker from the extracted copy. Add `--native` to check
-for `uv` and `--codex` to check for the standard launcher.
+Verify the ZIP against its separately published SHA-256 digest before extracting
+it to a new directory. Use `sha256sum -c SHA256SUMS` in the extracted standalone
+archive to verify its contents, or `shasum -a 256 -c SHA256SUMS` if your host has
+`shasum`. Run the read-only compatibility checker from the extracted copy. Add
+`--native` to check for `uv` and `--codex` to check for the standard launcher.
 
 ```bash
 python3 -B bmad-deliver/scripts/check_install.py --native --codex
@@ -71,23 +77,30 @@ named deliverable.
 
 ## Update or roll back
 
-Extract and verify the candidate in a new directory. Run the candidate's checker
-against either copy by passing its skill directory as the first argument.
+Extract and verify the candidate in a new directory. Use each release's own
+checker. To verify a copied install, pass its skill directory as the first argument
+to the matching checker.
 
 ```bash
-python3 -B /path/to/candidate/bmad-deliver/scripts/check_install.py /path/to/project/.agents/skills/bmad-deliver --native --codex
+python3 -B /path/to/candidate/bmad-deliver/scripts/check_install.py /path/to/candidate-project/.agents/skills/bmad-deliver --native --codex
 ```
 
 Install the candidate in a separate project or worktree with its own
 `.agents/skills` directory. Start a fresh workspace session there for new runs.
 Keep existing runs with the installation that started them because saved
 worker paths are absolute. To roll back new work, reopen the previous project
-and use its saved runtime. Keep the candidate available for runs it started.
-From the previous project, verify its installed skill using the original
-archive's extracted checksum file and open the saved run with its controller.
+and use its saved runtime. Keep the candidate available for runs with raw intake.
+From the previous project, verify the original v0.3.0 portable ZIP against its
+separately published digest. Extract it into an empty directory and use its
+checker to verify the installed skill before opening the saved run.
 
 ```bash
-(cd .agents/skills && sed -n '/  bmad-deliver\\//p' /path/to/original/SHA256SUMS | sha256sum -c -)
+archive_dir=/path/to/original/archives
+original=$(mktemp -d) &&
+(cd "$archive_dir" &&
+  sed -n '/  autonomous-delivery-beta-0\\.3\\.0\\.zip$/p' autonomous-delivery-beta-0.3.0.zip.sha256 | sha256sum -c -) &&
+python3 -m zipfile -e "$archive_dir/autonomous-delivery-beta-0.3.0.zip" "$original" &&
+python3 -B "$original/skills/bmad-deliver/scripts/check_install.py" .agents/skills/bmad-deliver &&
 python3 -B .agents/skills/bmad-deliver/scripts/deliver.py status /path/to/saved-run
 ```
 
@@ -107,6 +120,17 @@ python3 -B tools/package_delivery_beta.py /tmp/original-beta.zip
 python3 -m zipfile -e /tmp/original-beta.zip /tmp/original-beta
 python3 -B tools/package_delivery_beta.py /tmp/rebuilt-beta.zip --inputs /tmp/original-beta/bmad-deliver/assets/native/SOURCE.json
 cmp /tmp/original-beta.zip /tmp/rebuilt-beta.zip
+```
+
+Use `--plugin` to build the portable plugin layout. It uses the manifest and icon
+from the checksum-pinned v0.3.0 archive. The portable build carries the same skill
+payload and `SOURCE.json` under `skills/`.
+
+```bash
+python3 -B tools/package_delivery_beta.py /tmp/original-plugin.zip --plugin
+python3 -m zipfile -e /tmp/original-plugin.zip /tmp/original-plugin
+python3 -B tools/package_delivery_beta.py /tmp/rebuilt-plugin.zip --plugin --inputs /tmp/original-plugin/skills/bmad-deliver/assets/native/SOURCE.json
+cmp /tmp/original-plugin.zip /tmp/rebuilt-plugin.zip
 ```
 
 ## Try an example
@@ -175,7 +199,7 @@ def historical_brief_file(name):
         ) from exc
 
 
-def payload():
+def payload(*, plugin=False):
     spec = importlib.util.spec_from_file_location(
         "delivery_bundle_layout", ROOT / "skills/method/bmad-deliver/scripts/bundle_layout.py"
     )
@@ -190,6 +214,7 @@ def payload():
         json.dumps(
             {
                 "manifest_version": 1,
+                "release_version": layout.RELEASE_VERSION,
                 "archive_format": "zip-stored-v1",
                 "product_brief_revision": BRIEF_REVISION,
                 "builder_sha256": hashlib.sha256(source_bytes("tools/package_delivery_beta.py")).hexdigest(),
@@ -201,10 +226,33 @@ def payload():
         ).encode()
         + b"\n"
     )
+    if plugin:
+        return portable_payload(files, layout.SKILL, layout.RELEASE_VERSION)
     files["SHA256SUMS"] = "".join(
         f"{hashlib.sha256(content).hexdigest()}  {name}\n" for name, content in sorted(files.items())
     ).encode()
     return files
+
+
+def portable_payload(files, skill, version):
+    baseline = source_bytes(PORTABLE_BASELINE)
+    if hashlib.sha256(baseline).hexdigest() != PORTABLE_BASELINE_SHA256:
+        raise ValueError("The pinned v0.3.0 plugin archive checksum differs. Restore the original archive.")
+    with ZipFile(BytesIO(baseline)) as archive:
+        manifest = json.loads(archive.read("plugin.json"))
+        icon = archive.read("assets/delivery.svg")
+    manifest["version"] = version
+    manifest["extensions"]["com.openai"]["interface"]["longDescription"] = (
+        "Route ideas, research, and brainstorms through eight intake entry points in one saved run. "
+        "Native delivery covers run-local code, Product Briefs, and compatible mixed work. "
+        "The Codex intake adapter has signed-in smoke evidence. Claude Code workspace intake is a preview "
+        "with deterministic checks only. Requires Python 3.11 or later on a POSIX host and uv for native workflows."
+    )
+    return {
+        "plugin.json": (json.dumps(manifest, indent=2) + "\n").encode(),
+        "assets/delivery.svg": icon,
+        **{f"skills/{name}": content for name, content in files.items() if name.startswith(f"{skill}/")},
+    }
 
 
 def verify_inputs(path, generated):
@@ -242,12 +290,14 @@ def write_archive(path, files):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path)
+    parser.add_argument("--plugin", action="store_true", help="build a portable plugin archive")
     parser.add_argument("--inputs", type=Path, help="require the same SOURCE.json as a previous build")
     args = parser.parse_args()
     try:
-        files = payload()
+        files = payload(plugin=args.plugin)
         if args.inputs is not None:
-            verify_inputs(args.inputs, files[SOURCE_MANIFEST])
+            source = f"skills/{SOURCE_MANIFEST}" if args.plugin else SOURCE_MANIFEST
+            verify_inputs(args.inputs, files[source])
         write_archive(args.archive, files)
     except (OSError, ValueError) as exc:
         parser.exit(1, f"Delivery beta: {exc}\n")

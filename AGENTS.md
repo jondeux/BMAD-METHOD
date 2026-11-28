@@ -37,3 +37,18 @@ Open source framework for structured, agent-assisted software delivery. Skills l
 ## Documentation freshness
 
 Run the [freshness routine](docs/reference/document-freshness.md) after module moves, milestones, or a failing check. Run it as part of the current work without asking. The checker only reads files and never commits.
+
+## Approved learnings
+
+<learned>
+
+- 2026-11-27 — In BMad workflow maps and onboarding guides, show raw documents, research, and recordings as a distinct entry point. Verify which formats the workflow can read through its host.
+- 2026-11-27 — In BMad routing and model-upgrade work, retain the selected-option probability and any confidence statistic as separate signals. Evaluate both on labeled, representative intake before using them as routing gates.
+- 2026-11-27 — For subscription-only BMad intake and delivery, verify that the selected host will use the included allowance and can pause before using paid credits. Check this separately from sign-in.
+- 2026-11-27 — When the owner places a gate inside a saved Autonomous Delivery workflow, preserve the existing run and authority record. Verify that incompatible older runtimes safely reject new persistence protocols.
+- 2026-11-28 — In Codex subscription integrations, verify the first-party ChatGPT inference endpoint separately from the quota probe. Smoke-test the actual worker under the included allowance.
+- 2026-11-28 — For subscription preflight, inspect the existing CLI account read-only and pause on an ineligible authentication method. Preserve the stored credentials.
+- 2026-11-28 — Treat Autonomous Delivery call-budget and allowance changes as accounting updates. Preserve the intake revision and any eligible pending receipt when those are the only changes.
+- 2026-11-28 — For Autonomous Delivery releases, execute the documented rollback against the archived previous release and a representative saved run. Verify the separately published archive digest and use the previous release's compatibility checker.
+
+</learned>
