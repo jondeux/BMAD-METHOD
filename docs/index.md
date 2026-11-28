@@ -40,6 +40,9 @@ empty project.
 **You know exactly what needs to change, and it is small.**
 Run `bmad-build` and describe the change. See [Build a Change](./build/build-a-change.md).
 
+**You want a verified local deliverable from an idea or source material.**
+Use the [Autonomous Delivery beta manual](./build/autonomous-delivery.md).
+
 **You are working in an existing codebase.**
 Consider running `bmad-project-context`, then build as usual. See
 [Start in an Existing Codebase](./existing-codebases/start-in-an-existing-codebase.md) and

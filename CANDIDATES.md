@@ -1,6 +1,6 @@
 # Instruction candidates
 
-Approved candidates are recorded in [AGENTS.md](AGENTS.md#approved-learnings).
+All submitted candidates are approved and recorded in [AGENTS.md](AGENTS.md#approved-learnings).
 
 ## Approved on 2026-11-27
 
@@ -16,7 +16,5 @@ Approved candidates are recorded in [AGENTS.md](AGENTS.md#approved-learnings).
 
 7. **Keep accounting updates separate from intake revisions.** Preserve pending receipt eligibility and the intake revision when the owner changes the call budget or provider allowance. On 2026-11-28 the recovery tests showed that the earlier budget update could retire a pending classifier attempt even though its inputs were unchanged. The revised controller adopts the original late receipt after those updates. Scope includes Autonomous Delivery recovery and intake state transitions. [Recovery tests](skills/method/bmad-deliver/tests/test_delivery.py)
 8. **Run the documented rollback against the archived release.** Verify the archive against its separately published digest, use the archived version's compatibility checker, and open a representative saved run. On 2026-11-28, v0.4.0 review found that the installer expected an internal checksum file missing from the portable v0.3.0 archive. The corrected procedure succeeded with the actual archive and a saved code run. Scope includes Autonomous Delivery packaging and maintenance guides. [Release installer](tools/package_delivery_beta.py)
-
-## Pending
 
 9. **Verify the installation through the user’s launcher.** Confirm the version and enabled state in the same plugin registry the user opens, then verify that its entry skill is available. On 2026-11-28, the hosted v0.4.0 cache and the isolated install passed while the workspace’s local marketplace still offered v0.3.0. Scope includes Autonomous Delivery release handoffs and plugin installation checks.

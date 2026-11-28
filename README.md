@@ -93,6 +93,7 @@ Install the core method or add official modules for specialized work.
 
 ## Documentation
 
+- **[Autonomous Delivery plugin manual](docs/build/autonomous-delivery.md)** — Use the v0.4.0 beta to route intake, verify deliverables, and recover saved runs.
 - **[Build Your First Change](https://docs.bmad-method.org/start/build-your-first-change/)** — Install BMad and build a small project.
 - **[Choose a Planning Path](https://docs.bmad-method.org/plan/choose-a-planning-path/)** — Pick how much planning a change needs and see what each planning skill produces.
 - **[Start in an Existing Codebase](https://docs.bmad-method.org/existing-codebases/start-in-an-existing-codebase/)** — Add BMad to an existing codebase.

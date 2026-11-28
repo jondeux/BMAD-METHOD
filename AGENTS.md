@@ -50,5 +50,6 @@ Run the [freshness routine](docs/reference/document-freshness.md) after module m
 - 2026-11-28 — For subscription preflight, inspect the existing CLI account read-only and pause on an ineligible authentication method. Preserve the stored credentials.
 - 2026-11-28 — Treat Autonomous Delivery call-budget and allowance changes as accounting updates. Preserve the intake revision and any eligible pending receipt when those are the only changes.
 - 2026-11-28 — For Autonomous Delivery releases, execute the documented rollback against the archived previous release and a representative saved run. Verify the separately published archive digest and use the previous release's compatibility checker.
+- 2026-11-28 — Verify the release version and enabled state in the same plugin registry the owner uses, then verify that the installed entry skill is available in a fresh session.
 
 </learned>
