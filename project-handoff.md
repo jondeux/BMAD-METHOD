@@ -1,178 +1,84 @@
----
-name: "project-handoff"
-description: "Use when the user asks for a handoff, a STATE BLOCK, a session summary to carry over, or to continue the work in a new chat or another AI agent (often because the context is long). Sizes the handoff to the session, resolves cheap open items first, and writes a verified, privacy-safe state block plus a starter message. Use this instead of context-handoff's handoff-writing for any handoff."
----
+# BMAD-METHOD project handoff
 
-# Project handoff
+Updated 2026-11-28 for the Autonomous Delivery work on `handoff/autonomous-bmad-pilot-20261125`.
 
-## Purpose
+> Read [AGENTS.md](AGENTS.md) and this handoff first. From the repository root, run the clean-checkout checks below. Then prepare the offline, synthetic Ingest slice for Increment 6. The checkout contains the inputs for those steps. Use historical handoffs for evidence about earlier versions.
 
-Let a different agent, in a new chat, continue the work as if nothing happened. The handoff is a map of the
-current state, not a history of the chat.
+## Current state
 
-**Success test:** a new agent that reads only the handoff (and the files it lists) makes a correct next move in its
-first reply, and asks nothing the old chat already answered.
+The goal is one saved Autonomous Delivery run from the owner’s raw intake through an eligible BMad workflow, independent verification, and local artifacts. Intake is Delivery’s route phase. It chooses among eight entry points, then the controller checks capability, owner authority, and original acceptance checks before building. [Intake roadmap](.ai-context/intake-router-plan.md) · [Run contract](skills/method/bmad-deliver/references/run-record.md)
 
-## Step 0. Size the handoff
+| Area | Verified state on 2026-11-28 |
+| --- | --- |
+| Repository release | The handoff branch packages the v0.4.1 source, manual, two install ZIPs, and SHA-256 manifest. The release commit is `7aa2e8f4`. The 15-case test pack and separate evaluator guide are ready for trial. Use `git log -1 -- .ai-context/delivery-beta/autonomous-delivery-beta-0.4.1.zip` to identify the release commit. |
+| Local plugin | v0.4.1 was installed and enabled in the delivery workspace through `bmad-delivery-local`. A fresh workspace exposed its skill and questionnaire. A fresh clone supplies the archives and source. Its plugin installation must be checked in the actual launcher. |
+| Private hosted plugin | The existing private release was read back at v0.4.0. Codex Settings reported the newer local installation alongside this older hosted installation. The older entry was uninstalled by its exact hosted identity. After refresh, v0.4.1 was the only installed entry. v0.4.0 remains visible as an uninstalled private listing. The owner authorized removal of that listing. The Codex delete request was rejected because it requires an active workspace, while this listing has personal scope. The rollback archive remains available locally. |
+| Intake and execution | Roadmap Increments 1–5 are complete. All eight route IDs are recognized. Native execution covers run-local code, Product Brief, and mixed delivery in that order when both are requested. Unsupported subtypes report a capability gate. |
+| v0.4.1 chat behavior | After usable intake, asks for Mode A, B, or C, the available host, model and effort, dispatch budget, and deliverable size. It asks for a trusted checker only where needed. The current chat’s questionnaire is preferred where available, with explicit chat replies as fallback. |
+| Saved runs and rollback | v0.4.1 read v0.4.0 raw state without modifying it. Installed tests also replayed v0.3.0 code, brief, and mixed runs. v0.3.0 rejects newer raw state. An in-place marketplace upgrade pruned v0.4.0 locally, and the verified old bytes were restored at their exact path. |
 
-Pick the smallest tier that carries everything a successor needs. Say which tier you chose in one line.
+The eight route IDs are `sources`, `unclear`, `thinking`, `trivial`, `small`, `existing`, `epic`, and `project`. The executable subtypes are `thinking/product-brief`, `trivial/run-local-code`, `small/code`, and `small/code-and-product-brief`. A raw document, PDF, recording, video, or literature review can supply context. v0.4.1 uses owner-authorized readable text or excerpts. A task to process the source itself can route to `sources` and pause for its handler. [Route catalog](skills/method/bmad-deliver/references/intake-routes.json) · [User manual](docs/build/autonomous-delivery.md)
 
-| Tier | When | Output |
-|---|---|---|
-| **S, short** | A short session with a few decisions and no deliverables in flight | The short format (section 5a), at most about 20 lines |
-| **M, standard** | Real work done, some open items, a few files | The full STATE BLOCK (section 5b), in chat only |
-| **L, project** | A long or multi-day project with deliverables, environments, approvals or rules | The STATE BLOCK plus HANDOFF.md, optional file bundle, starter message (section 6) |
+## Decisions to carry forward
 
-If nothing worth handing off happened, say so plainly: "Nothing decision-worthy to hand off from this session."
-Do not pad the template.
+- The owner approved deliverable **scope** as the questionnaire’s size choice. The existing 512 KiB intake, 4 MiB receipt, and 8 MiB standard Codex job bounds apply. Configurable byte caps and command-line switches are deferred.
+- Mode A waits for proposal approval. Mode B delegates within the owner’s stated boundaries. Mode C preserves the named deliverable. Size is saved as an owner decision in the intake, so class-only Mode B keeps its original authority. An unanswered or preselected questionnaire option carries no authority. [Questionnaire contract](skills/method/bmad-deliver/references/intake-questions.md)
+- Preserve the saved run path, original typed checks, current proposal revision, and worker paths. Budget and allowance updates alone preserve the intake revision and any eligible pending receipt. A frozen scope change needs a linked new request. Share the allowlisted telemetry export for diagnosis and keep job packets, source excerpts, raw logs, and receipts private. [Recovery and telemetry](skills/method/bmad-deliver/references/run-record.md)
+- Live provider work uses an authorized signed-in subscription with included allowance. Check account eligibility and paid continuation separately before confirming a run. The owner chose Codex-only live smoke. Claude Code intake remains a preview with deterministic evidence. The dispatch-cap approval and the subscription allowance confirmation are distinct decisions. [Subscription guard](skills/method/bmad-deliver/scripts/subscription.py)
+- The owner’s standing instruction is “Commit and push only when I say ‘commit and push’.” Their approved remote destination is `origin/handoff/autonomous-bmad-pilot-20261125`. Follow `AGENTS.md` for clean-tree and branch rules. The owner approved learning #12 and authorized publication of the current repository changes after reviewing the [15 sample projects](.ai-context/autonomous-delivery-smoke-projects.md). This handoff provides standing context for offline verification and preparation. Live provider dispatch, hosted publication, raw-source retention, and future Git pushes require the applicable explicit authorization.
 
-## Step 1. Harvest (read before you write)
+## Start here on a clean checkout
 
-Read the whole conversation and every file the user attached for the handoff. Collect:
+1. Run `git status --short --branch` and `git log -3 --oneline`. Use this handoff branch or an isolated worktree based on it. Keep local user changes intact. Verify the two v0.4.1 archive hashes. If those files are absent, check the active branch and fetch the handoff ref before running the v0.4.1 smoke.
+2. Exercise the installed package before assuming a launcher or account is configured. The smoke below unpacks the standalone archive in a temp directory and uses a synthetic transcript. Its expected result is `capability-unavailable` at `sources/ingest-note` with zero dispatches. Python 3.11+ and a POSIX shell are required. For later native work also install `uv`. For a Codex install in this workspace, use `codex plugin list --marketplace bmad-delivery-local --json` and verify the skill in a fresh session. Check the local and hosted entries in fresh Codex Settings after an upgrade. Remove lower-version active installs by exact identity and verify only the new version remains installed. Preserve earlier worker paths needed by saved runs.
+3. Run the focused tests, freshness checks, and strict reference validation. At a release milestone, run the full suite and rebuild both ZIP layouts against the archived `SOURCE.json`. The pinned Product Brief revision is in this branch’s full Git history. Use a full clone for rebuilds, or fetch the history in a shallow checkout. [Freshness routine](docs/reference/document-freshness.md) · [Builder](tools/package_delivery_beta.py)
 
-- **The latest results the user sent.** These come first. Analyse them before anything else (step 2).
-- **Standing rules,** quoted word for word when the user stated them strongly (capitals, "never", "always").
-- **Go-words and approvals:** words the user uses to approve things, and what is still waiting for one.
-- **Decisions with their reasons,** and **alternatives that were rejected, with why**. The reasoning is the part
-  that cannot be re-derived; a rejected path recorded here is a dead end the next agent will not walk again.
-- **Preferences:** style, reply order, tone, formats, file limits, the user's skill level, OS and tools.
-- **Deliverables:** every file that matters, with its name, version, purpose, location, and SHA256 if one exists.
-- **Corrections the user made to you.** These are lessons, and they go into the workflow field.
-
-Leave out: routine back-and-forth that led nowhere (typos, a corrected path), pleasantries, full code or diffs
-(reference the file instead), and anything already in the project's CLAUDE.md or README (point to it instead).
-
-## Step 2. Analyse the latest results
-
-If the user attached new results (test output, logs, reports):
-
-1. Compare before and after where both exist.
-2. For each failure or warning: give the cause if the evidence shows it. Otherwise write "cause UNKNOWN" and name
-   the single command, file or fact that would prove it.
-3. Never state a cause the data does not show. "Likely" is allowed only with the reason it is likely.
-
-## Step 3. Resolve what is cheap and safe, before handing off
-
-The user wants as few open items as possible. Close the ones you can close without the user.
-
-- Do it if it is **cheap** (minutes, not a new project), **safe** (no change to the user's live systems, no
-  redeploy, nothing irreversible) and **testable here** (you can prove the fix with a test and a negative control).
-- Do not start large new work during a handoff. If the user has said to stop spending effort on something, drop it
-  and record it as closed or deferred.
-- An item that needs the user (a console check, a fact only they have) stays open. Give it the single command or
-  one-word answer that would close it.
-- An item that needs real work goes in "next actions" for the successor.
-
-## Step 4. Privacy and secrets pass
-
-Before writing the final text:
-
-- Replace the user's domain, host names, IP addresses, account IDs, emails and other personal details with
-  placeholders such as `<DOMAIN>`, `<HOST>`, `<IP>`, `<ACCOUNT>`.
-- Never include secrets, tokens, keys, passwords or the contents of environment files. Name them, never show them.
-- Exception: a file the user's system needs to run may keep real values. List those files by name so the user can
-  decide before sharing them with another service.
-- **Check mechanically:** search everything you are about to deliver for the real values you know (the actual
-  domain, host name and addresses from the conversation). Zero hits outside the listed exceptions.
-
-## Step 5. Write the handoff
-
-Mark every claim with its evidence level:
-
-- `[V]` verified, with the evidence named (file, command, measurement, date).
-- `[I]` inferred, with the reason.
-- `[U]` UNKNOWN, with what would settle it.
-
-Plain English, short sentences. Dates as absolute dates, not "yesterday".
-
-### 5a. Short format (tier S)
-
-```
-## [Project name], session handoff ([date])
-
-Decisions:
-- [decision] - [reason]
-
-Rejected alternatives:
-- [alternative] - [why rejected]
-
-Open / blocked:
-- [specific blocker: the actual error, API or pending decision] - next step: [action]
-
-Conventions noted:
-- [preference the user stated]
-
-Next: [the first thing to do in the new chat]
+```bash
+release_dir="$PWD/.ai-context/delivery-beta"
+(cd "$release_dir" && sha256sum -c autonomous-delivery-beta-0.4.1.zip.sha256)
+work=$(mktemp -d)
+python3 -m zipfile -e "$release_dir/bmad-deliver-beta-0.4.1.zip" "$work/unpacked"
+delivery="$work/unpacked/bmad-deliver/scripts"
+python3 -B "$delivery/check_install.py"
+python3 -B "$delivery/deliver.py" --version
+cat > "$work/intake.json" <<'JSON'
+{
+  "text": "Turn the synthetic transcript into a cited note.",
+  "route_id": "sources",
+  "subtype": "ingest-note",
+  "sources": [{"id": "transcript-1", "excerpt": "The team approved the Tuesday trial."}],
+  "budget": 1
+}
+JSON
+start_status=0
+python3 -B "$delivery/deliver.py" start "$work/run" --intake "$work/intake.json" || start_status=$?
+test "$start_status" -eq 2
+python3 -B "$delivery/deliver.py" status "$work/run"
 ```
 
-Omit a section that has nothing in it. Do not write "None".
-
-### 5b. STATE BLOCK (tiers M and L)
-
-One code block. Fill every field below. If a field is truly empty, write "none" and why. Aim for under about
-1,800 words: enough to act on, not the history.
-
-```
-STATE BLOCK  ([project], [date])
-
-goal:                        the end state of the whole project, in 2-3 lines.
-success test:                the checks that prove the goal is met (numbers, commands, expected results).
-stage completed:             what is DONE and confirmed, with dates; what is built but not yet applied.
-terms I've learned:          a glossary of project words, go-words, IDs and short names, one line each, so the new
-                             agent understands the user's vocabulary.
-goals (ranked):              priorities in order, used to break ties.
-audience:                    who reads the outputs, their skill level, preferred style, reply order, OS and tools.
-requirements:                MUST / SHOULD / COULD / NOT NOW, including every standing rule (strict ones quoted).
-workflow and rubric:         the working loop step by step, the quality bar each deliverable must pass, and the
-                             lessons learned from the user's corrections.
-decisions made (and why):    ID, choice, reason, how to undo it.
-rejected alternatives:       what was considered and dropped, and why, so it is not tried again.
-assumptions to confirm:      what is treated as true but not proven, and how to check each one.
-open questions:              ranked. For each: status, evidence so far, the single next action, owner (agent or user).
-verified so far / still unverified:
-                             two lists. Verified items name their evidence. Unverified items are marked UNKNOWN.
-next actions:                the first 3 things the new agent should do, in order.
-files and environment:       every file that matters (name, version, purpose, location, SHA256), and key facts about
-                             the system (no secrets). Say which older documents this handoff overrides.
-risks and rollback:          known residual risks, and the exact undo for each change in flight.
-pending approvals:           what is waiting for the user's go-word, and what each word unlocks.
+```bash
+uv run --frozen python -B -m pytest -n 3 skills/method/bmad-deliver/tests tools/tests/test_package_delivery_beta.py
+python3 -B docs/_checks/check_references.py
+node docs-site/scripts/validate-doc-links.js
+uv run --frozen python -B tools/validate_skills.py --strict
+uv run --frozen python -B tools/validate_file_refs.py --strict
 ```
 
-## Step 6. Package (tier L)
+If dependencies are already cached, add `--offline` to the `uv run` commands. The archive check, standalone smoke, and freshness checker can run while project dependencies are unavailable. The standalone archive includes `INSTALL.md` and `SHA256SUMS`. On systems without `sha256sum`, the equivalent archive verification is `shasum -a 256 -c`.
 
-- **File limit:** at most 4 files, fewer is better. The usual set:
-  1. `HANDOFF.md`: the STATE BLOCK, the file inventory, the starter message, the user's next steps.
-  2. One archive with the current scripts, tests, test results and build inputs, plus a SHA256 list.
-  3-4. Only if something cannot go in the archive.
-- Re-run the tests after the last change, and put the results in the archive.
-- Write HANDOFF.md where the user can get it: send it with the file-sending tool if there is one; in a repository
-  with no other place, use `.ai-context/handoff.md`.
-- Keep it portable: plain Markdown, no tool-specific syntax, so any agent (Claude or not) can read it.
+## Next work after the baseline passes
 
-### Starter message (put it at the top of HANDOFF.md)
+1. **Prepare Increment 6, first Ingest handler.** Read the [Ingest skill](skills/core-tools/bmad-ingest/SKILL.md) and [native host contract](skills/method/bmad-deliver/references/native-host.md). Use plain UTF-8 synthetic material, such as the transcript above. Plan a single `sources/ingest-note` path and save the plan under `_bmad-output/`. Use the existing route and saved run. Describe how the headless Ingest result binds its cited note to the approved source snapshot. Define the receipt, where the note and temporary raw evidence are kept, and how the verifier checks citations against the source.
+2. **Write the offline acceptance cases in the plan.** Require a cited note bound to the source, correct handling of an unreadable source, refusal of a missing or mismatched source binding, and safe resume with an eligible saved receipt. Keep the other source subtypes at their existing gate. Give each fixture an expected route, gate, artifact and verification result. Confirm what must be added to the allowlist and package tests before any new handler is advertised. This preparation can proceed without live credentials or owner-supplied files. [Increment 6 roadmap](.ai-context/intake-router-plan.md#5-implementation-and-plugin-upgrade-sequence)
+3. **Keep live evidence and release actions separate.** When an owner authorizes a fresh v0.4.1 interactive dry run, use the manual’s Product Brief prompt for a source-check path and the code prompt for a required-checker path. Observe actual questionnaire replies, unchanged approval state, applied model and dispatch settings, publication, and telemetry. For a private promotion, verify the existing identity and scope, retain the old exact runtime, then verify the new hosted read-back. Jev or another System One classifier is a later, separately approved increment. [User manual and test prompts](docs/build/autonomous-delivery.md)
 
-Three to six lines the user can paste into the new chat as-is: what to read, which rules apply, and what to do
-first. Example shape:
+The revised [sample projects](.ai-context/autonomous-delivery-smoke-projects.md) include planning-first application journeys and a non-code handoff. For projects 9–12, send only the quoted intake to Delivery and keep the [evaluator guide](.ai-context/autonomous-delivery-smoke-evaluator.md) in a separate workspace. Record the inferred route and any capability gate before continuing through manual artifact handoffs. Preserve the build-first mixed route as a separate regression. When extending orchestration, route from the latest stage artifact and its unresolved decision, including the Deep Recon report return. The samples are ready for evaluation. Results from provider-backed runs of this pack are still pending.
 
-> I am handing over a project. Read HANDOFF.md fully and unpack the archive. Continue from the STATE BLOCK.
-> Rules: [the 3-5 strictest standing rules]. Start with "next actions" item 1.
+## Evidence and file map
 
-## Step 7. Check before you send
-
-Run every check. Fix any that fails, then check again.
-
-- [ ] The tier fits the session, and the tier is stated.
-- [ ] The latest results were analysed first; no cause is stated without evidence.
-- [ ] Every field is filled (tier M/L), or empty sections are omitted (tier S).
-- [ ] Every open item has a next action and an owner.
-- [ ] Every claim carries `[V]`, `[I]` or `[U]`.
-- [ ] Standing rules are present, the strict ones word for word.
-- [ ] The mechanical privacy search found no real domain, host, IP or secret outside the listed exceptions.
-- [ ] At most 4 files, each with a SHA256; tests re-run after the last change (tier L).
-- [ ] **Cold-read test:** read the handoff as the new agent, with no access to this chat. Write down the first 3
-      questions you would ask. If the old chat answers any of them, add the answer to the handoff.
-
-## In the chat reply
-
-After delivering: the STATE BLOCK (or short format) as one copyable code block, then at most 3 lines: the tier,
-what was resolved during the handoff, and what the user should do first. Nothing else.
+- The v0.4.1 full Python suite passed 1,402 tests and 198 subtests. One optional `tiktoken` test was skipped. Seven final packaging tests and five tests against the enabled installed runtime passed. The checker verified 50 bundled files. Both ZIPs rebuilt byte for byte, and the unconfirmed managed launcher paused at zero dispatches. The complete live v0.4.1 questionnaire-to-artifact flow remains untested. The earlier signed-in Codex booking smoke covers the v0.4.0 adapter. [Release evidence levels](skills/method/bmad-deliver/references/evaluate-delivery.md)
+- The historical Lantern House game and guide passed 4/4 embedded-browser checks and were accepted by the owner as usable as delivered. That result is evidence for the earlier mixed delivery, separate from v0.4.1 questionnaire verification. [U7 scorecard](.ai-context/delivery-u7/scorecard.md)
+- **Install inputs** — [v0.4.1 portable plugin](.ai-context/delivery-beta/autonomous-delivery-beta-0.4.1.zip), [standalone skill](.ai-context/delivery-beta/bmad-deliver-beta-0.4.1.zip), and [SHA-256 manifest](.ai-context/delivery-beta/autonomous-delivery-beta-0.4.1.zip.sha256). [v0.4.0 rollback package](.ai-context/delivery-beta/autonomous-delivery-beta-0.4.0.zip) · [v0.4.0 checksums](.ai-context/delivery-beta/autonomous-delivery-beta-0.4.0.zip.sha256)
+- **Runtime** — [Skill entry](skills/method/bmad-deliver/SKILL.md), [controller](skills/method/bmad-deliver/scripts/deliver.py), [intake classifier contract](skills/method/bmad-deliver/scripts/intake_router.py), [native host helper](skills/method/bmad-deliver/scripts/native_host.py), [telemetry](skills/method/bmad-deliver/scripts/run_telemetry.py), and [package layout](skills/method/bmad-deliver/scripts/bundle_layout.py).
+- **Checks and fixtures** — [Delivery tests](skills/method/bmad-deliver/tests/test_delivery.py), [intake fixtures](skills/method/bmad-deliver/tests/fixtures/intake-route-cases.json), [telemetry tests](skills/method/bmad-deliver/tests/test_intake_telemetry.py), and [package tests](tools/tests/test_package_delivery_beta.py).
+- **Project memory** — [Approved learnings](AGENTS.md#approved-learnings), [candidates](CANDIDATES.md), [earlier handoff and evidence](.ai-context/handoff.md), and the [original handoff-writing procedure](.ai-context/project-handoff-procedure.md). Transient working paths and local plugin caches are machine-specific. The [tracked BMAD route map](_bmad-output/autonomous-delivery-route-map/bmad-method-route-map.html) is available in a clean clone. Everything required to start the offline work is linked here from the tracked tree.

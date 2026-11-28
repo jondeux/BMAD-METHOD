@@ -1,9 +1,10 @@
 # BMad intake as the Autonomous Delivery route phase
 
-- **Status** — Increment 5 is complete. Autonomous Delivery Beta v0.4.0 passed release qualification and is the current private hosted release.
+- **Status** — Increment 5 is complete. The private v0.4.0 listing has historical release qualification and remains available in the catalog as an uninstalled entry.
+- **Workspace patch** — v0.4.1 adds the chat intake questionnaire and is the current locally qualified repository release. The [current project handoff](../project-handoff.md) records the verification boundary and next work.
 - **Rollback baseline** — The v0.3.0 archive and its separate installed copy remain available. The candidate resumed archived code, Product Brief, and mixed runs. The old runtime refused raw-intake state without modifying it.
 - **Host qualification** — Codex has the signed-in intake smoke from Increment 3 and local package verification. Claude Code workspace intake remains a preview with deterministic verification.
-- **Release files** — [Portable plugin](delivery-beta/autonomous-delivery-beta-0.4.0.zip) · [Standalone skill](delivery-beta/bmad-deliver-beta-0.4.0.zip) · [Archive checksums](delivery-beta/autonomous-delivery-beta-0.4.0.zip.sha256)
+- **Release files** — [v0.4.1 portable plugin](delivery-beta/autonomous-delivery-beta-0.4.1.zip) · [Standalone skill](delivery-beta/bmad-deliver-beta-0.4.1.zip) · [Archive checksums](delivery-beta/autonomous-delivery-beta-0.4.1.zip.sha256) · [v0.4.0 rollback checksums](delivery-beta/autonomous-delivery-beta-0.4.0.zip.sha256)
 
 ## 1. Product and architecture decision
 
@@ -168,6 +169,12 @@ Increment 5 changes the hosted plugin only after candidate verification. Test an
 For `sources` as a prerequisite, give the source-preparation step an owner-approved scope before retaining originals. Its receipt identifies a cited note and its source binding. Keep that intermediate private until the final approved deliverable or check calls for it. For a downstream classification or planning step, reuse the same intake run and count any new dispatch. If authorizing a change to an already-frozen deliverable would materially change original acceptance, use a linked new request.
 
 For `epic` and `project`, distinguish a planning deliverable from full implementation. A planning packet can be verified and published when that is the agreed outcome. Full execution eventually requires an orchestrator to bind each story to the approved requirements and initial snapshot, enforce readiness and parent budgets, and save each dispatch and result. Model one story per Build Auto invocation. Prove dependency ordering, interruption recovery, shared constraint preservation, consolidated verification, and epic acceptance before labeling the parent complete. Until this implementation exists, keep plans, verified eligible steps, and owner handoffs clearly visible as separate outcomes. [Ticket planning and status](../docs/plan/break-work-into-stories-and-track-it.md) · [Epic acceptance](../docs/build/finish-an-epic.md)
+
+### Route from the latest stage artifact
+
+A raw idea can use Brainstorming to find a direction or Forge Idea to test a candidate. Read the saved intent and identify the next unresolved decision. If it needs evidence, support Deep Recon Draft, an owner handoff to the research tool, and Process when the report returns. Use the cited summary in the Product Brief, PRD, or spec that fits the work. Build from the approved requirements for a coding project. For non-code, stop when the approved document passes its checks, or use the planning artifact as the input to the workflow for the requested final output.
+
+For each automated transition, retain the prior artifact identity, the evidence that determines the next action, and any outstanding owner decision. Default to a gate when the current outcome cannot support a valid transition. Test the research and direct-to-planning paths separately, and count planning-first end-to-end completion only after the final artifact passes the original checks. [Blind evaluator guide](autonomous-delivery-smoke-evaluator.md#from-a-raw-idea-to-a-verified-deliverable)
 
 ## 6. Verification and release criteria
 

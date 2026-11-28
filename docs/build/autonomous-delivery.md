@@ -1,21 +1,21 @@
 ---
 title: "Autonomous Delivery plugin manual"
-description: "Use Autonomous Delivery Beta v0.4.0 to route raw intake, approve a delivery plan, verify artifacts, and resume saved runs."
+description: "Use Autonomous Delivery Beta v0.4.1 to route raw intake, approve a delivery plan, verify artifacts, and resume saved runs."
 ---
 
-Use `bmad-deliver` to turn an idea, brainstorm, research excerpt, or other authorized material into verified local files. Version 0.4.0 adds intake to the same saved run that builds, verifies, and publishes the result.
+Use `bmad-deliver` to turn an idea, brainstorm, research excerpt, or other authorized material into verified local files. Intake stays in the same saved run that builds, verifies, and publishes the result. Version 0.4.1 adds a chat questionnaire for owner decisions before dispatch.
 
 :::tip[First run]
-Open the project in the coding workspace that has Autonomous Delivery Beta v0.4.0 enabled. Invoke `$bmad-deliver`, give it one small outcome, name the files or deliverable, supply observable checks, and set a dispatch cap. Ask it to return the saved run path, the artifact paths, and the check results.
+Open the project in the coding workspace that has Autonomous Delivery Beta v0.4.1 enabled. Invoke `$bmad-deliver`, give it one small outcome, name the files or deliverable, supply observable checks, and answer the questionnaire. Ask it to return the saved run path, the artifact paths, and the check results.
 :::
 
 ## 1. Verify your installation
 
 Native delivery requires a POSIX host, Python 3.11 or later, `uv`, and a workspace agent that can run native jobs and their review steps. For subscription-backed Codex intake, the workspace also needs the `codex` CLI and a compatible signed-in subscription session.
 
-1. Open the plugin picker in the workspace you will use. Confirm that **Autonomous Delivery Beta** is enabled at **0.4.0** and that its `bmad-deliver` skill is available. Select it using the name shown by your workspace if it displays a plugin-qualified name.
-2. In the Codex CLI, use `codex plugin list --json`. Find the matching delivery entry under `installed` and check its version and `enabled` value. For an entry from this project's local marketplace, use `codex plugin list --marketplace bmad-delivery-local --json`. If the picker still lists 0.3.0, refresh or reinstall from a source that offers 0.4.0 and verify again in a fresh session.
-3. If you need a standalone install, download the standalone ZIP and its checksum file. Verify the ZIP, extract it in a new directory, and follow its `INSTALL.md`. The portable plugin ZIP is for hosts that install plugin packages. [v0.4.0 release files](https://github.com/jondeux/BMAD-METHOD/tree/c3f3787955e37e273fd71facbef084ea8698c3e6/.ai-context/delivery-beta)
+1. Open the plugin picker in the workspace you will use. Confirm that **Autonomous Delivery Beta** is enabled at **0.4.1** and that its `bmad-deliver` skill is available. Select it using the name shown by your workspace if it displays a plugin-qualified name.
+2. In the Codex CLI, use `codex plugin list --json`. Find the matching delivery entry under `installed` and check its version and `enabled` value. For an entry from this project's local marketplace, use `codex plugin list --marketplace bmad-delivery-local --json`. If the picker lists an earlier release, refresh or reinstall from a source that offers 0.4.1 and verify again in a fresh session.
+3. If you need a standalone install, find the v0.4.1 standalone ZIP and checksum in the checkout under `.ai-context/delivery-beta/`. Verify the ZIP, extract it in a new directory, and follow its `INSTALL.md`. The portable plugin ZIP is for hosts that install plugin packages. [v0.4.1 release files](https://github.com/jondeux/BMAD-METHOD/tree/7aa2e8f4491563872a55872632e81f97c04960de/.ai-context/delivery-beta)
 
 With the installed skill directory known, run these commands against that copy. For a project-local standalone install, the skill directory is `.agents/skills/bmad-deliver`. For a plugin install, use the `bmad-deliver` skill directory bundled with the selected plugin.
 
@@ -26,7 +26,7 @@ python3 -B "$DELIVERY" --version
 python3 -B "$DELIVERY_SKILL/scripts/check_install.py" --native --codex
 ```
 
-Expect `0.4.0` and a compatible install. Omit `--codex` when checking an install you will use without the Codex launcher.
+Expect `0.4.1` and a compatible install. Omit `--codex` when checking an install you will use without the Codex launcher.
 
 ## 2. Give Delivery a usable intake
 
@@ -42,11 +42,19 @@ The input format and the requested outcome can point to different routes. A lite
 > `$bmad-deliver` Use Mode C. Deliver a Product Brief on whether to trial an automatic release policy for unused library room bookings. Use only this synthetic note as evidence: “The simulation excluded false releases. The facilities director owns the trial decision.” Verify that the brief states the simulation limitation, identifies the decision owner, and clearly labels the trial as proposed. Keep it as a local draft. Cap the run at three dispatches. Return the saved run path, artifact path, and the evidence for each check.
 :::
 
+### Answer the chat questionnaire
+
+Once the outcome and source material are usable, the skill opens the current chat’s questionnaire when the host and interaction mode provide it. Choose a delegation mode and host, then confirm the applicable model and effort, dispatch cap, and deliverable size. A setting you already supplied can be offered as a choice to keep. The run waits for your submitted choices.
+
+Size controls the scope of the returned package within the existing byte limits. Choose required files only, the full agreed package, or a custom size target. If an executable check or the selected host needs a trusted checker and a usable one is missing, the skill asks for it separately. When the host or interaction mode has no questionnaire, the skill presents the choices in chat and waits for your reply.
+
+A saved run keeps its existing decisions. If it pauses, answer only the question shown by its status.
+
 ## 3. Read the route and capability before approving work
 
 Delivery uses the immediate goal to select a route and, when needed, a **subtype**. The subtype identifies the kind of work within that route. A classified route can pause at `capability-unavailable` when this release lacks its execution handler.
 
-| Route | Bring this | v0.4.0 execution |
+| Route | Bring this | v0.4 execution |
 | --- | --- | --- |
 | `sources` | Documents, PDFs, literature reviews, transcripts, or other sources to process | Identifies source ingestion, research synthesis, or a maintained document. Each pauses for a separate workflow. |
 | `unclear` | A vague idea, alternatives to explore, or a research gap | Identifies brainstorming, pressure testing, or research. Each pauses for a separate workflow. |
@@ -57,7 +65,9 @@ Delivery uses the immediate goal to select a route and, when needed, a **subtype
 | `epic` | One outcome that needs several independently verifiable stories | Identifies epic planning or execution. Both require a separate workflow. |
 | `project` | Several epics, teams, or shared decisions to coordinate | Identifies initiative planning or execution. Both require a separate workflow. |
 
-A custom guide, PRD, or report paired with code is a different delivery contract from code plus a Product Brief. Agree on any change to the deliverable at the gate. Native outputs are run-local UTF-8 text files. Binary deliverables, deployment, direct worktree integration, and sending files to others require their own authorized workflow. [v0.4.0 route catalog](https://github.com/jondeux/BMAD-METHOD/blob/c3f3787955e37e273fd71facbef084ea8698c3e6/skills/method/bmad-deliver/references/intake-routes.json)
+A custom guide, PRD, or report paired with code is a different delivery contract from code plus a Product Brief. Agree on any change to the deliverable at the gate. Native outputs are run-local UTF-8 text files. Binary deliverables, deployment, direct worktree integration, and sending files to others require their own authorized workflow. [v0.4.1 route catalog](https://github.com/jondeux/BMAD-METHOD/blob/7aa2e8f4491563872a55872632e81f97c04960de/skills/method/bmad-deliver/references/intake-routes.json)
+
+For a raw idea, use [idea exploration](../plan/explore-and-validate-an-idea.md) to settle the direction where needed. If a decision needs evidence, use [Deep Recon](../plan/research-a-decision.md) to draft a research prompt and process the report you bring back. Take the saved intent and research into the [appropriate planning artifact](../plan/define-requirements-and-a-specification.md). Bring the approved requirements and checks to Delivery when the project is ready to build. In v0.4.1, the discovery, research, and planning handoffs use standalone BMad skills.
 
 ## 4. Choose how much to delegate
 
@@ -73,7 +83,7 @@ If you supply an intake correction, read the new proposal before approving. The 
 > `$bmad-deliver` Use Mode A. Propose a run-local Python file named `capacity.py` with `remaining(capacity, booked)` for nonnegative integers. It returns seats remaining, floored at zero. Require executable checks for `remaining(10, 6) == 4` and `remaining(4, 6) == 0`. Ask me for the trusted local checker if none is available. Wait for my approval before the build. Keep the run local and cap it at three dispatches.
 :::
 
-:::note[Copyable mixed prompt]
+:::note[Copyable prompt for an already-scoped mixed package]
 > `$bmad-deliver` Use Mode B. Deliver `capacity.py and Product Brief` for a local room-capacity trial. I allow only the `mixed` output class and this exact deliverable label. Implement the capacity function from the code example. The brief must name the facilities director as the decision owner and describe the trial as proposed. Verify the two capacity cases with my trusted local checker and cite the brief lines for the two document checks. Keep all files local and cap the run at four dispatches.
 :::
 
@@ -93,11 +103,11 @@ Use a checker you trust to exercise the behavior. A browser can be part of verif
 
 **Codex.** Use the existing signed-in ChatGPT subscription session. Run `codex login status` to check sign-in, then verify included allowance, zero purchased-credit balance, and automatic reload off in the account's usage settings before confirming a plan-only run. Repeat that check for the serving workspace and its review agents. A signed-in Codex intake-to-artifact smoke has been recorded. [Codex authentication](https://learn.chatgpt.com/docs/auth) · [OpenAI credit behavior](https://help.openai.com/en/articles/12642688-using-credits-for-flexible-usage-in-chatgpt-personal-plans)
 
-**Claude Code preview.** Use the authorized workspace and a trusted local verifier. Check `/status` and `/usage` in that session and disable usage credits. Use its workspace to serve the intake and native jobs. The v0.4.0 Claude path has deterministic coverage. [Claude Code commands](https://code.claude.com/docs/en/commands) · [Claude usage credits](https://support.claude.com/en/articles/12429409-manage-usage-credits-for-paid-claude-plans)
+**Claude Code preview.** Use the authorized workspace and a trusted local verifier. Check `/status` and `/usage` in that session and disable usage credits. Use its workspace to serve the intake and native jobs. The v0.4 Claude path has deterministic coverage. [Claude Code commands](https://code.claude.com/docs/en/commands) · [Claude usage credits](https://support.claude.com/en/articles/12429409-manage-usage-credits-for-paid-claude-plans)
 
 | Control | How to use it |
 | --- | --- |
-| Model and effort | For the built-in Codex adapter, pass `--model MODEL` and `--effort low\|medium\|high\|xhigh` on start when supported. Native build and review jobs use the serving workspace's model settings. In Claude Code, choose the model and effort in that session. |
+| Model and effort | For the built-in Codex adapter, pass `--model MODEL` and `--effort low\|medium\|high\|xhigh` on start when supported. Confirm the serving workspace model and effort separately if they differ from the settings for the Codex adapter. In Claude Code, choose the model and effort in that session. |
 | Dispatch budget | A first-pass run normally needs three dispatches for code or a Product Brief, or four for code plus Product Brief. This includes intake classification and verification. An explicit owner route can skip the classification call. |
 | Retries and timeout | Every new dispatch counts, including failed attempts and retries. The default per-call timeout is 600 seconds. Set `timeout_seconds` in the intake envelope when the workflow needs a different limit. |
 | Subscription allowance | Included usage is checked separately from the dispatch cap. Failed preflight uses zero dispatches. A refusal after a dispatch still counts. Nested review calls use the serving host's allowance. |
@@ -106,7 +116,7 @@ Use a checker you trust to exercise the behavior. A browser can be part of verif
 
 ## 7. Start and inspect a run from the terminal
 
-Most users can invoke the skill in chat. For a controlled terminal launch, run the controller from the authorized workspace agent so it can serve its native jobs. Use the installed path from [Verify your installation](#1-verify-your-installation).
+Most users can invoke the skill in chat. For a controlled terminal launch, record the settings yourself and run the controller from the authorized workspace agent so it can serve its native jobs. Use the installed path from [Verify your installation](#1-verify-your-installation).
 
 Save the following as `library-intake.json`. It leaves route selection to the classifier and gives the owner-authorized scope explicitly.
 
@@ -192,12 +202,12 @@ Telemetry includes route and gate labels, relative timings, dispatch and retry c
 
 ## 10. Update or roll back without losing saved runs
 
-Install each version at a separate path and retain the path used by its saved runs. Saved workers can reference absolute paths. Verify an archive against its published SHA-256 digest, run that version's own compatibility checker, then open a representative saved run with its controller.
+Install each version at a separate path and retain the path used by its saved runs. Saved workers can reference absolute paths. Back up the old runtime before an in-place marketplace upgrade. The local Codex installer can prune older versions from its cache. Verify that the old path still works after upgrading. Check both the local and private hosted entries in fresh Codex Settings. Uninstall older active versions by their exact identities and verify that only the current version is installed. Keep rollback artifacts outside the active plugin list. Verify an archive against its published SHA-256 digest, run that version's own compatibility checker, then open a representative saved run with its controller.
 
-The v0.4.0 controller passed replays of v0.3.0 structured code, Product Brief, and mixed runs. Keep v0.4.0 available for its raw-intake runs. The v0.3.0 controller refuses the newer raw protocol. To roll back new starts, use the verified v0.3.0 install in a separate project. [Pinned runtime and rollback procedure][delivery-rollback]
+The v0.4.1 controller passed replays of v0.3.0 structured code, Product Brief, and mixed runs. It also read v0.4.0 raw state without changing the saved bytes. Keep the corresponding v0.4 runtime available for each raw-intake run. The v0.3.0 controller refuses the newer raw protocol. To roll back new starts, use the verified v0.3.0 install in a separate project. [Pinned runtime and rollback procedure][delivery-rollback]
 
-[delivery-verification]: https://github.com/jondeux/BMAD-METHOD/blob/c3f3787955e37e273fd71facbef084ea8698c3e6/skills/method/bmad-deliver/references/run-record.md#acceptance-checks
-[delivery-native-host]: https://github.com/jondeux/BMAD-METHOD/blob/c3f3787955e37e273fd71facbef084ea8698c3e6/skills/method/bmad-deliver/references/native-host.md
-[delivery-request]: https://github.com/jondeux/BMAD-METHOD/blob/c3f3787955e37e273fd71facbef084ea8698c3e6/skills/method/bmad-deliver/references/run-record.md#request
-[delivery-telemetry]: https://github.com/jondeux/BMAD-METHOD/blob/c3f3787955e37e273fd71facbef084ea8698c3e6/skills/method/bmad-deliver/references/run-record.md#shareable-telemetry
-[delivery-rollback]: https://github.com/jondeux/BMAD-METHOD/blob/c3f3787955e37e273fd71facbef084ea8698c3e6/skills/method/bmad-deliver/references/run-record.md#pin-the-runtime-for-saved-runs
+[delivery-verification]: https://github.com/jondeux/BMAD-METHOD/blob/7aa2e8f4491563872a55872632e81f97c04960de/skills/method/bmad-deliver/references/run-record.md#acceptance-checks
+[delivery-native-host]: https://github.com/jondeux/BMAD-METHOD/blob/7aa2e8f4491563872a55872632e81f97c04960de/skills/method/bmad-deliver/references/native-host.md
+[delivery-request]: https://github.com/jondeux/BMAD-METHOD/blob/7aa2e8f4491563872a55872632e81f97c04960de/skills/method/bmad-deliver/references/run-record.md#request
+[delivery-telemetry]: https://github.com/jondeux/BMAD-METHOD/blob/7aa2e8f4491563872a55872632e81f97c04960de/skills/method/bmad-deliver/references/run-record.md#shareable-telemetry
+[delivery-rollback]: https://github.com/jondeux/BMAD-METHOD/blob/7aa2e8f4491563872a55872632e81f97c04960de/skills/method/bmad-deliver/references/run-record.md#pin-the-runtime-for-saved-runs

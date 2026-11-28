@@ -38,6 +38,10 @@ Open source framework for structured, agent-assisted software delivery. Skills l
 
 Run the [freshness routine](docs/reference/document-freshness.md) after module moves, milestones, or a failing check. Run it as part of the current work without asking. The checker only reads files and never commits.
 
+## Project handoff
+
+Read the [project handoff](project-handoff.md) before continuing Autonomous Delivery work from a fresh checkout.
+
 ## Approved learnings
 
 <learned>
@@ -51,5 +55,8 @@ Run the [freshness routine](docs/reference/document-freshness.md) after module m
 - 2026-11-28 — Treat Autonomous Delivery call-budget and allowance changes as accounting updates. Preserve the intake revision and any eligible pending receipt when those are the only changes.
 - 2026-11-28 — For Autonomous Delivery releases, execute the documented rollback against the archived previous release and a representative saved run. Verify the separately published archive digest and use the previous release's compatibility checker.
 - 2026-11-28 — Verify the release version and enabled state in the same plugin registry the owner uses, then verify that the installed entry skill is available in a fresh session.
+- 2026-11-28 — Before an in-place Autonomous Delivery plugin upgrade, back up the exact active runtime. Verify that the worker paths saved by earlier runs still resolve after installation.
+- 2026-11-28 — After installing an Autonomous Delivery upgrade, remove older active installs of that plugin by exact identity across the local and hosted registries. Verify the user-facing installed list contains only the new version. Keep rollback archives and any runtime paths still needed by saved runs.
+- 2026-11-28 — Test planning-first Autonomous Delivery with blind intake. Keep expected routes and handoffs in a separate evaluator guide, score the next step from the saved artifact and open decision, and record scoped mixed-package compatibility separately.
 
 </learned>
